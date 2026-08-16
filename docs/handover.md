@@ -15,13 +15,15 @@ chosen and now measured — a throwaway spike proved it works and was deleted.
 
 ## Current stage
 
-Stage 1 — Product definition, nearly complete; first Stage 2 document exists
-(`docs/tech-stack.md`). Three hard-stop gates closed (ADR-0001, ADR-0002, ADR-0003); one remains
-open (B-004). **B-048 passed — something ran, and ADR-0001 survived contact with a measurement.**
+Stage 1 essentially complete; Stage 2 begun (`docs/tech-stack.md`). **All blocking gates are
+closed** — ADR-0001 (Tauri 2), ADR-0002 (GPL-3.0), ADR-0003 (chess libraries), ADR-0004
+(SQLite). B-048 passed, so the framework choice survived contact with a measurement.
+**Nothing is blocking implementation. The next session should be writing product code (B-054).**
 
 ## Active work
 
-- Nothing in progress. B-048 is run and written up; B-004 (storage gate) is the next hard stop.
+- Nothing in progress. B-048 is run and written up, B-004 is decided. Next is **B-054 — the M1
+  skeleton**, and it is the first product code in the repository.
 
 ## Decided
 
@@ -84,8 +86,19 @@ Session 2:
   B-058/B-059), B-075 (which locales, later). Vision amended: new value-proposition bullet, new
   success criterion, MVP sketch updated.
 
-No notify-and-proceed choices made this session. B-050 was recorded as a decision rather than an
-ADR — it is a scope choice, reversible by building B-015.
+- **ADR-0004 — Storage: SQLite**, and B-004 downgraded from hard stop to notify-and-proceed.
+  The downgrade is the substantive part. The gate's premise was "migrating a user's database is
+  a data-safety problem" — but **PGN files are retained as source of truth and the MVP is
+  read-only, so nothing exists only in the database.** Abandoning the store costs a re-import.
+  True by construction, not by discipline.
+  **The gate has an expiry date: B-015.** When annotations become writable, the DB holds data
+  that lives nowhere else and the original reasoning applies again. B-079 pairs export (B-017)
+  with annotation to defuse it a second time.
+  SQLite itself was the boring choice: relational indexes are exactly right for header search
+  over 10k rows, and a second SQLite file for the reference database stays open.
+
+B-050 was recorded as a decision rather than an ADR — it is a scope choice, reversible by
+building B-015.
 
 ## Standing constraints
 
@@ -100,6 +113,10 @@ ADR — it is a scope choice, reversible by building B-015.
   job rather than a refactor. Layout must tolerate ~35% text expansion.
 - **Read-only MVP must not become a read-only schema** (B-050). Header columns are derived;
   the verbatim PGN is the source of truth; rows carry stable IDs from the first migration.
+- **The database must stay derivable** (ADR-0004, B-078). PGN files are the retained source of
+  truth; import is idempotent; dropping and rebuilding the DB is a supported path. This is the
+  condition the whole storage decision rests on — if it lapses quietly, the gate re-hardens and
+  nobody notices.
 
 ## Recently completed
 
@@ -115,6 +132,10 @@ Session 2:
 - **`docs/tech-stack.md` created** — first Stage 2 deliverable, half of B-055. It carries the
   B-048 findings and the B-067 throttling rule. `docs/architecture.md` still outstanding.
 - **B-076, B-077 added** from what the spike exposed.
+- **B-004 closed — SQLite, ADR-0004** — and the gate itself downgraded from hard stop to
+  notify-and-proceed. **Nothing is now blocking implementation.** B-006 remains open but only
+  escalates to a gate if an engine binary is bundled (B-051), which M1 does not trigger.
+- **B-078, B-079 added** — the conditions ADR-0004 depends on, given owners.
 
 Session 1:
 
@@ -133,14 +154,14 @@ Session 1:
 
 ## Open decisions
 
-- **B-004 — Local storage / database engine.** The one remaining hard stop. Now much more
-  constrained: Rust backend, 10k-game MVP, read-only at MVP (B-050), must leave room for a
-  separate read-mostly position-indexed reference database. SQLite is the obvious candidate; the
-  gate still needs running properly, including the schema questions in B-058 – B-062. B-050
-  makes the gate *easier* — no edit or drift path to design for — provided the read-only
-  simplification is not baked in irreversibly.
+- **Schema shape — B-058 (player table + name normalisation), B-059 (partial dates), B-060
+  (full tag set as JSON).** ADR-0004 downgraded the *engine* decision, not these. They get baked
+  into import code and every query, and are expensive to change no matter what sits underneath.
+  Decide them at B-054, deliberately.
 - **B-006 — Engine process management & UCI transport.** Escalates to a platform-surface
-  commitment only if an engine binary is bundled. Not triggered by M1.
+  commitment only if an engine binary is bundled. Not triggered by M1. The B-048 spike already
+  demonstrated the transport half working (spawn, stdin/stdout, throttled emit, clean kill with
+  no orphans), so what remains here is packaging, not mechanism.
 - **B-051 — Bundle an engine or require user-supplied.** Unblocked on licensing grounds now
   (Stockfish is GPL-3.0, same family), so this reduces to binary size, signing, and per-platform
   builds.
@@ -163,9 +184,10 @@ Session 1:
 4. **Two chess rule implementations must agree** (shakmaty and chessops). Accepted cost of the
    ADR-0003 split; tracked as B-064.
 5. **Vision quality was becoming a trap; the spike broke the pattern but did not cure it.**
-   Something finally ran. The count is now thirteen documents and one *discarded* executable —
-   the project still has no product code. Momentum over perfection still applies: B-054 (M1
-   skeleton) is what turns this into a standing risk again if it slips.
+   Something finally ran. The count is now fourteen documents and one *discarded* executable —
+   the project still has no product code. **Every gate is now closed, so deliberation has run
+   out of legitimate excuses.** If the next session produces another document instead of B-054,
+   this is no longer a risk but a diagnosis.
 6. **The reference database is a second product hiding inside the first.** Licensing and download
    size (B-043) are likely harder than the code. Keep it post-MVP; let it veto storage choices
    that would make it impossible.
@@ -192,14 +214,18 @@ Session 1:
 
 ## Next actions
 
-1. **B-004 — run the storage gate.** The one remaining hard stop, and nothing is blocking it now.
-   Include the schema questions (B-058 – B-062) and the read-only simplification from B-050.
-2. **B-054** (M1 Skeleton) and the rest of **B-055** (`architecture.md`; `tech-stack.md` now
-   exists). The skeleton is where B-072 (message catalogue) and B-069 (portability guardrails)
-   either get established or get lost — both are structural, and both are cheap only if they are
-   there from the first screen. B-065 (SPDX) also unblocks here.
-3. **B-046** — three-OS CI. Cheap, and it is what makes the amended cross-platform criterion
-   true rather than aspirational.
+1. **B-054 — M1 skeleton.** First product code. Window, static board from a FEN, mock game list,
+   navigation. Write `docs/milestones/m1-skeleton.md` first. Three things get established here
+   or get lost, all structural and all cheap only if present from the first screen:
+   **B-072** (message catalogue — no user-facing string literals), **B-069** (portability
+   guardrails — paths, shortcuts, dialogs behind abstractions), and the single frontend IPC
+   adapter that keeps ADR-0001 reversible. **B-065** (SPDX) unblocks the moment the manifests
+   exist. Decide B-058 – B-060 as part of this.
+2. **B-046** — three-OS CI. Cheap, and it is what makes the amended cross-platform criterion
+   true rather than aspirational. Best done with the skeleton, while there is almost nothing to
+   compile and failures are trivial to diagnose.
+3. **`docs/architecture.md`** — the remaining half of B-055. Carry the B-067 throttling rule
+   across from `tech-stack.md` and record the layout the skeleton actually uses.
 
 `B-053` (core workflows doc) is the remaining Stage 1 deliverable but is not on the critical
 path. `B-065` (SPDX identifiers) unblocks once manifests exist at B-054.
