@@ -1,0 +1,99 @@
+# B-046 — three-OS build matrix.
+#
+# This workflow is what makes the amended cross-platform success criterion true rather
+# than aspirational. Only macOS can currently be *tested* (B-068) because there are no
+# Windows or Linux testers yet (B-070) — so the guarantee this file provides is narrower
+# and worth stating plainly: **all three targets compile.** It cannot tell us how the app
+# looks or feels anywhere except macOS.
+#
+# Set up now, while there is almost nothing to compile and a red build is trivial to
+# diagnose. Retrofitting CI onto a year of accumulated platform drift is the expensive
+# version of this task.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (typecheck, guardrails, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # B-072 / ADR-0001: no user-facing literals, no IPC calls outside src/shell/.
+      - name: Check i18n and IPC boundary
+        run: npm run check:i18n
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build frontend
+        run: npx vite build
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: frontend
+    strategy:
+      # Do not cancel the other two when one fails: knowing whether a break is
+      # platform-specific or universal is the entire point of the matrix.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+          - platform: ubuntu-22.04
+          - platform: windows-latest
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf \
+            build-essential \
+            file \
+            wget
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      # tauri-build reads tauri.conf.json and expects frontendDist to exist.
+      - name: Build frontend
+        run: npx vite build
+
+      - name: Build Tauri app
+        run: cargo build --manifest-path src-tauri/Cargo.toml --verbose
