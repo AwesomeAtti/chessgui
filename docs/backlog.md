@@ -53,7 +53,7 @@ Deferred ideas worth keeping but not scheduling can also live in `docs/parking-l
 | B-041 | feature | P2 | proposed | Opening explorer over reference DB: move frequencies + W/D/L statistics | The reason B-040 exists. Depends on B-040 and B-042 |
 | B-042 | tech-debt | P2 | proposed | Position index design (Zobrist-style hashing, dedupe, storage cost) | Shared foundation for B-018 and B-041. Spec before building either |
 | B-043 | chore | P0 | proposed | Source data for reference DB: find a masters game set with redistributable licensing | Blocks B-040. Licensing and download size are the real constraints, not the code |
-| B-044 | chore | P0 | proposed | git init, secrets hygiene, per-repo pseudonymous commit identity, push to GitHub | GitHub project created. Identity must be set BEFORE first commit — history is permanent |
+| B-044 | chore | P0 | done | git init, secrets hygiene, per-repo pseudonymous commit identity, push to GitHub | Initial commit `99a6079` pushed to `origin/main`. Identity verified pseudonymous; `.DS_Store` excluded |
 | B-045 | chore | P2 | proposed | GitHub repo hygiene: branch protection, issue/PR templates, CODEOWNERS, Dependabot | Do when the repo goes public, not before |
 | B-046 | chore | P2 | proposed | CI on GitHub Actions: build + test matrix across Windows, macOS, Linux | The only thing that keeps "cross-platform" honest. Follows B-003 |
 | B-047 | chore | P3 | proposed | Distribute releases via GitHub Releases (installers per platform) | Distribution channel decision is separate from repo hosting; revisit at B-032 |

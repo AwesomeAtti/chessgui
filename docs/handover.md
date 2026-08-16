@@ -33,9 +33,16 @@ Stage 0 — Idea validation: **complete**. Gate passed — the idea fits on one 
   to reverse (a git remote), so it is recorded here rather than gated. Distribution channel
   for built releases is a *separate*, later decision (B-047 / B-032) and should not be assumed
   to follow from this.
+- **Commit identity: set per-repo, pseudonymous, GitHub no-reply address.** Verified present
+  on the initial commit as both author and committer. The address is deliberately *not*
+  written into any tracked file — it lives in `.git/config` only. Do not add it to
+  documentation, and do not set it globally.
 
 ## Recently completed
 
+- **Repository initialised, committed, and pushed to GitHub** (`main`, commit `99a6079`,
+  tracking `origin/main`) with a pseudonymous per-repo identity. 15 files tracked;
+  `.DS_Store` correctly excluded by `.gitignore`.
 - `docs/product-vision.md` written and approved: problem, users, value proposition, MVP,
   success criteria, non-goals, open questions.
 - `docs/backlog.md` seeded with 39 items (B-001 – B-039), including future features and
@@ -80,22 +87,24 @@ No notify-and-proceed choices made this session — nothing technical has been d
 
 ## Next actions
 
-1. **`git init` and first commit** (B-044) — see the identity warning below. The GitHub
-   project exists; the local repo does not. Everything written so far lives only on disk.
-2. Run `ai/prompts/kick-off.md` for Stage 1: MVP scope, core workflows, feature list.
-3. Then open the B-003 framework gate with a spike on board rendering + engine I/O.
+1. Run `ai/prompts/kick-off.md` for Stage 1: MVP scope, core workflows, feature list.
+2. Then open the B-003 framework gate — with a spike on board rendering under engine I/O
+   before committing to anything.
 
 ## Notes for the next session
 
-- **Not a git repository yet.** `git init` has not been run, so nothing is committed and the
-  GitHub remote has never been pushed to. Per `ai/methodology.md` ("Starting a new project"),
-  do secrets hygiene *before* the first commit: `.gitignore` is in place, and a **per-repo**
-  commit identity must be set (`git config user.name` / `git config user.email`) using a
-  pseudonym and a GitHub `@users.noreply.github.com` address. This matters more than usual —
-  the repo is destined for GitHub and the intent is to open-source it. Git records author name
-  and email on every commit independently of file contents, so a repo with clean files and a
-  real-name commit history is not clean. Verify with `git log --format='%an <%ae>'` before the
-  first push.
+- **Repo is public-facing on GitHub from commit one.** Anything committed from here on is
+  permanently visible. The pre-commit habit that matters: check `git status` before staging,
+  never `git add -A` blind once source and local databases exist.
+- **AI assistants working in a sandboxed environment may not be able to delete files** in this
+  folder, which can leave a stale `.git/index.lock` that blocks all git commands. Fix is
+  `rm -f .git/index.lock` from a normal terminal; no repository data is at risk. Prefer
+  running commits from a real terminal.
+- **Identity hygiene is a standing rule, not a one-off.** It is set per-repo, so it does not
+  survive a fresh clone made with a global identity. Re-verify with
+  `git log --format='%an <%ae>'` before any push to a public remote — git records author and
+  email on every commit independently of file contents, so clean files plus a real-name
+  history is not clean.
 - **Keep this repository free of personal information.** No real names, usernames, email
   addresses, or absolute filesystem paths containing a home directory — in code, docs, config,
   comments, or commit messages. The placeholder in `ai/prompts/session-start.md` is left
