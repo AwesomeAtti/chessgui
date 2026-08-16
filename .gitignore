@@ -1,0 +1,40 @@
+# Secrets and local config — never tracked
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+credentials.json
+
+# OS junk
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*~
+
+# Build output and dependencies (extend once the stack is chosen)
+build/
+dist/
+out/
+target/
+bin/
+obj/
+node_modules/
+
+# Local databases and sample game data — may contain personal information
+*.sqlite
+*.sqlite3
+*.db
+local/
+scratch/
+
+# Chess engine binaries (large, platform-specific, licence-bearing)
+engines/
