@@ -1,0 +1,466 @@
+/*
+ * Application chrome — layout and affordance only.
+ *
+ * Scope line, and it is deliberate: panes, scroll containers, selection states, hit areas
+ * and focus are in scope because they are structural and expensive to change later. Colour
+ * palettes, board and piece theming, and type scale are B-024 and are absent on purpose.
+ *
+ * Two rules govern almost everything here:
+ *
+ * 1. **The window is the viewport.** The shell is exactly one screen tall, the document never
+ *    scrolls, and any region that overflows scrolls its own body. This depends on
+ *    `min-height: 0` on every ancestor of a scrolling region — grid and flex children default
+ *    to `min-height: auto` and refuse to shrink, which is the commonest way the rule breaks
+ *    silently.
+ * 2. **Fixed measure for text, fluid for graphics** (ADR-0007). The side panel never changes
+ *    width; the board and the table absorb every resize.
+ *
+ * B-072 still applies: nothing may assume English text lengths. No fixed widths on anything
+ * holding translatable prose; ~35% expansion must not break the layout.
+ */
+
+:root {
+  --panel-w: 320px;
+  --gap: 0.75rem;
+
+  --surface: Canvas;
+  --surface-sunken: color-mix(in srgb, Canvas 92%, CanvasText);
+  --surface-raised: color-mix(in srgb, Canvas 97%, CanvasText);
+  --canvas: color-mix(in srgb, Canvas 86%, CanvasText);
+  --line: color-mix(in srgb, Canvas 80%, CanvasText);
+  --text: CanvasText;
+  --text-muted: color-mix(in srgb, CanvasText 58%, Canvas);
+  --selection: color-mix(in srgb, Highlight 26%, Canvas);
+  --selection-strong: color-mix(in srgb, Highlight 60%, Canvas);
+
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--surface);
+  /* Application chrome is not a text document. Re-enabled on copyable content below. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 2px solid var(--selection-strong);
+  outline-offset: -2px;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+}
+
+.statusbar {
+  padding: 0.3rem var(--gap);
+  border-top: 1px solid var(--line);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  /* Fixed height so the workspace never jumps when this populates. */
+  min-height: 1.9rem;
+}
+
+.workspace {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Document tabs ------------------------------------------------------------ */
+
+.tab-bar {
+  display: flex;
+  align-items: stretch;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--line);
+  /* Many open tabs scroll sideways rather than shrinking to illegibility. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--line);
+  max-width: 15rem;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.tab.active {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.tab-label,
+.tab.pinned {
+  padding: 0.4rem 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  padding: 0 0.5rem;
+  color: var(--text-muted);
+  align-self: stretch;
+}
+
+.tab-close:hover {
+  color: var(--text);
+  background: var(--selection);
+}
+
+/* Side panel — fixed width, three parts ------------------------------------ */
+
+.side-panel {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.panel-header {
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+/* A segmented control, deliberately not styled like the document tabs above. */
+.segmented {
+  display: flex;
+  background: var(--surface-sunken);
+  border-radius: 5px;
+  padding: 2px;
+}
+
+.segment {
+  flex: 1;
+  padding: 3px 6px;
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 0.9em;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.segment.selected {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.panel-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.panel-footer {
+  border-top: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.nav-buttons {
+  display: flex;
+}
+
+.nav-buttons button {
+  flex: 1;
+  padding: 0.35rem 0;
+  color: var(--text-muted);
+}
+
+.nav-buttons button:hover:not(:disabled) {
+  background: var(--selection);
+  color: var(--text);
+}
+
+.nav-buttons button:disabled {
+  opacity: 0.35;
+}
+
+/* Library view ------------------------------------------------------------- */
+
+/* The library is a single full-width region: the table is the artefact in this view and
+   anything beside it competes with the width W5 needs. The fixed panel belongs to the game
+   view only (ADR-0007, amended). */
+.library-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.game-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--panel-w);
+  height: 100%;
+  min-height: 0;
+}
+
+.table-region {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  min-height: 0;
+}
+
+.filter-bar {
+  display: flex;
+  gap: var(--gap);
+  align-items: center;
+  padding: 6px var(--gap);
+  border-bottom: 1px solid var(--line);
+}
+
+.filter-bar input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+.table-scroll {
+  min-height: 0;
+  overflow: auto;
+}
+
+.game-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  /* Fixed layout stops columns resizing as rows scroll or the pane narrows. */
+  table-layout: fixed;
+}
+
+.game-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.game-table th,
+.game-table td {
+  padding: 0.25rem var(--gap);
+  text-align: start; /* logical property — correct under RTL */
+  /* Truncate rather than wrap: wrapping gives rows different heights, which is what made
+     the earlier list reflow as the window narrowed. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-table td {
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 40%, transparent);
+}
+
+.game-table .col-elo {
+  width: 3.5rem;
+}
+.game-table .col-date {
+  width: 7rem;
+}
+.game-table .col-result {
+  width: 4rem;
+}
+.game-table .col-eco {
+  width: 3.5rem;
+}
+
+.game-table .col-elo,
+.game-table .col-result {
+  font-variant-numeric: tabular-nums;
+}
+
+.game-table tbody tr:hover {
+  background: color-mix(in srgb, var(--selection) 40%, transparent);
+}
+
+.game-table tbody tr.selected {
+  background: var(--selection);
+}
+
+/* Game view ---------------------------------------------------------------- */
+
+.board-region {
+  display: grid;
+  /* Player strips are fixed height; the board takes everything left over. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--canvas);
+  padding: 6px var(--gap);
+  gap: 4px;
+}
+
+.player-strip {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-elo {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The element measured by the ResizeObserver in useChessground. Every ancestor needs
+   min-height: 0 or this reports a height that only ever grows. */
+.board-pane {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Width and height are set in pixels by useChessground, not here. */
+.board {
+  aspect-ratio: 1;
+}
+
+.panel-title {
+  margin: 0;
+  padding: 3px 4px;
+  font-size: 0.85em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Move list ---------------------------------------------------------------- */
+
+.move-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.move-list li {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr 1fr;
+  align-items: stretch;
+  font-variant-numeric: tabular-nums;
+}
+
+.move-list li:nth-child(odd) {
+  background: color-mix(in srgb, var(--line) 18%, transparent);
+}
+
+.move-number {
+  color: var(--text-muted);
+  text-align: end;
+  padding: 2px 6px 2px 0;
+}
+
+.move {
+  text-align: start;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.move:hover {
+  background: var(--selection);
+}
+
+.move.current {
+  background: var(--selection-strong);
+}
+
+/* Info list ---------------------------------------------------------------- */
+
+.info-list {
+  margin: 0;
+  padding: var(--gap);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.info-list dt {
+  color: var(--text-muted);
+}
+
+.info-list dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.info-list .info-section {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.info-pair {
+  display: contents;
+}
+
+/* Utilities ---------------------------------------------------------------- */
+
+.notice {
+  margin: var(--gap);
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
