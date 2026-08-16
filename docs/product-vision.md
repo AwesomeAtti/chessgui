@@ -42,7 +42,8 @@ community once it is genuinely usable.
 - **Engine analysis without engine administration.** UCI engines configured, run, and
   interpreted through an approachable interface.
 - **Consistent across Windows, macOS, and Linux** — one product, three platforms,
-  native-feeling on each.
+  native-feeling on each. All three are first-class targets and build from day one; they
+  *release* in the order they can be verified, which currently means macOS first.
 
 ## 4. MVP sketch
 
@@ -65,7 +66,8 @@ position search. Each is a natural next milestone; none is needed to prove the c
 | Search is fast enough to think with | Filtered results on a 10k-game database in under 200 ms — fast enough to explore, not to query |
 | Approachable | A chess-literate person who has never seen it imports a PGN and finds a specific game with no instructions |
 | Feels current | Side-by-side with an incumbent, the interface reads as contemporary; first run presents no configuration wall |
-| Cross-platform is real | The same build ships and runs on all three OSes from day one, not "Linux later" |
+| Cross-platform stays buildable | All three targets compile green in CI on every commit, from the first commit — divergence fails loudly rather than accumulating silently |
+| Cross-platform becomes real | Each platform ships once someone has actually run it. macOS first, since it is the only one currently testable; Windows and Linux follow as testers are found (B-070). "Untested" is an honest state; "assumed working" is not |
 
 ## 6. Non-goals
 
