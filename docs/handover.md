@@ -3,8 +3,8 @@
 > The current state of the project. Update at the end of every session so the next session
 > (human or AI) can resume with zero chat history.
 
-**Last updated:** 2026-08-16 · **Updated by:** AI (Stage 1 / kick-off session) · **Kit version:** 0.2.0
-· **Head at session end:** `d86bc66`
+**Last updated:** 2026-08-16 · **Updated by:** AI (Stage 1 / session 2) · **Kit version:** 0.2.0
+· **Head at session end:** `c84ade7` + uncommitted scope decisions
 
 ## Project summary
 
@@ -20,7 +20,8 @@ session (ADR-0001, ADR-0002, ADR-0003); one remains open (B-004).
 
 ## Active work
 
-- Nothing in progress. Next session runs the B-048 spike.
+- Nothing in progress. B-048 spike is next; Rust, Node, and a local Stockfish binary are
+  confirmed available on the dev machine.
 
 ## Decided
 
@@ -34,7 +35,7 @@ Earlier sessions:
 - **Commit identity: per-repo, pseudonymous, GitHub no-reply address.** Lives in `.git/config`
   only — deliberately not written into any tracked file.
 
-This session (all recorded as ADRs):
+Session 1 (all recorded as ADRs):
 
 - **ADR-0001 — UI framework: Tauri 2** with a TypeScript frontend. Chosen because it is the only
   candidate with a best-in-class off-the-shelf answer to both hard problems: `chessground` for
@@ -64,7 +65,27 @@ row. Makes "zero data loss, round-trips cleanly" true by construction rather tha
 Schema details raised: B-058 (player table + name normalisation), B-059 (partial dates),
 B-060 (full tag set as JSON, `Result` as integer), B-061/B-062 (compression, FTS5 — post-MVP).
 
-No notify-and-proceed choices made this session.
+Session 2:
+
+- **B-050 — the MVP is read-only.** Import, browse, search, play through; nothing in the app
+  modifies a game. Rationale: the MVP exists to validate the import path and the look and feel,
+  and neither needs a write path. Storing games in a local SQL database is already a meaningful
+  improvement over the file-based habits of existing GUIs, independent of editing.
+  **Condition attached, and it matters at the B-004 gate:** read-only is a *build-order* choice,
+  not a schema shape. Stable row IDs, verbatim PGN as the source of truth, header columns
+  strictly derived — so annotation (B-015) is an addition, not a migration. The vision's open
+  question 1 is answered but its warning is only deferred: a library you cannot write into may
+  not displace anything, so B-015 is the first post-MVP milestone.
+- **Multi-language support is a requirement, and was missing from every document.** English is
+  the first locale, not the only one; no second language ships in the MVP. Recorded as B-072
+  (externalise all strings, backend returns error codes, pseudo-locale check in CI), B-073
+  (localised SAN — `Nf3` / `Sf3` / `Cf3` — forces storage notation and display notation apart,
+  with figurine as the language-free escape hatch), B-074 (locale collation and dates, ties to
+  B-058/B-059), B-075 (which locales, later). Vision amended: new value-proposition bullet, new
+  success criterion, MVP sketch updated.
+
+No notify-and-proceed choices made this session. B-050 was recorded as a decision rather than an
+ADR — it is a scope choice, reversible by building B-015.
 
 ## Standing constraints
 
@@ -73,8 +94,19 @@ No notify-and-proceed choices made this session.
   Linux; it stops being true the moment Tauri APIs are sprinkled through components.
 - **Everything links GPL-3.0-or-later.** No closed-source path exists any more. Check the
   licence of any new dependency before adding it.
+- **No user-facing string literals in components** (B-072). Everything goes through a message
+  catalogue; the Rust backend returns error codes, never English prose. English is the only
+  locale that ships in the MVP — the constraint is that adding the second one is a translation
+  job rather than a refactor. Layout must tolerate ~35% text expansion.
+- **Read-only MVP must not become a read-only schema** (B-050). Header columns are derived;
+  the verbatim PGN is the source of truth; rows carry stable IDs from the first migration.
 
 ## Recently completed
+
+Session 2:
+
+- **B-050 closed** — MVP scope set to read-only; vision §4, §7, §8 and success criteria amended.
+- **B-072 – B-075 added** — multi-language requirement captured; vision §3 and §5 amended.
 
 - Stage 1 kick-off review: read `AGENTS.md`, `ai/methodology.md`, `README.md`, vision, backlog,
   handover. Summarised state, risks, quick wins, and gates.
@@ -92,9 +124,11 @@ No notify-and-proceed choices made this session.
 ## Open decisions
 
 - **B-004 — Local storage / database engine.** The one remaining hard stop. Now much more
-  constrained: Rust backend, 10k-game MVP, must leave room for a separate read-mostly
-  position-indexed reference database. SQLite is the obvious candidate; the gate still needs
-  running properly, including the schema questions in B-058 – B-062.
+  constrained: Rust backend, 10k-game MVP, read-only at MVP (B-050), must leave room for a
+  separate read-mostly position-indexed reference database. SQLite is the obvious candidate; the
+  gate still needs running properly, including the schema questions in B-058 – B-062. B-050
+  makes the gate *easier* — no edit or drift path to design for — provided the read-only
+  simplification is not baked in irreversibly.
 - **B-006 — Engine process management & UCI transport.** Escalates to a platform-surface
   commitment only if an engine binary is bundled. Not triggered by M1.
 - **B-051 — Bundle an engine or require user-supplied.** Unblocked on licensing grounds now
@@ -141,7 +175,10 @@ No notify-and-proceed choices made this session.
    come back, into `docs/tech-stack.md`.
 2. **B-004** — run the storage gate once the spike is in. Include the schema questions
    (B-058 – B-062).
-3. **B-054** (M1 Skeleton) and **B-055** (`tech-stack.md`, `architecture.md`).
+3. **B-054** (M1 Skeleton) and **B-055** (`tech-stack.md`, `architecture.md`). The skeleton is
+   where B-072 (message catalogue) and B-069 (portability guardrails) either get established or
+   get lost — both are structural, and both are cheap only if they are there from the first
+   screen. B-065 (SPDX) also unblocks here.
 4. **B-046** — three-OS CI. Cheap, and it is what makes the amended cross-platform criterion
    true rather than aspirational.
 

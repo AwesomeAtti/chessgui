@@ -44,6 +44,9 @@ community once it is genuinely usable.
 - **Consistent across Windows, macOS, and Linux** — one product, three platforms,
   native-feeling on each. All three are first-class targets and build from day one; they
   *release* in the order they can be verified, which currently means macOS first.
+- **Speaks the player's language.** Chess is international and the incumbents are largely
+  English- or German-first. Multi-language support is a design constraint from the first
+  commit; English is simply the first locale shipped, not the only one anticipated.
 
 ## 4. MVP sketch
 
@@ -57,6 +60,15 @@ The smallest thing worth shipping: **get your games in, find them, look at them.
 Explicitly **not** in the MVP: engine analysis, annotation editing, Chess.com/Lichess import,
 position search. Each is a natural next milestone; none is needed to prove the core.
 
+**The MVP is read-only** *(decided — B-050)*. Games arrive by import and are never modified in
+the app. This is a build-order decision, not a permanent shape: the schema must still be able
+to accept writes later (stable row IDs, verbatim PGN as source of truth, header columns
+strictly derived). Read-only means *we have not built writes yet* — not *writes were designed
+out*. See §8 question 1.
+
+**English is the first locale, not the only one.** No second language ships in the MVP, but the
+codebase carries no hardcoded user-facing strings from the first commit. See B-072 – B-074.
+
 ## 5. Success criteria
 
 | Signal | Observable test |
@@ -66,6 +78,7 @@ position search. Each is a natural next milestone; none is needed to prove the c
 | Search is fast enough to think with | Filtered results on a 10k-game database in under 200 ms — fast enough to explore, not to query |
 | Approachable | A chess-literate person who has never seen it imports a PGN and finds a specific game with no instructions |
 | Feels current | Side-by-side with an incumbent, the interface reads as contemporary; first run presents no configuration wall |
+| Ready to translate | A pseudo-locale build shows no untranslated string and no clipped layout — the test is that adding a language is a translation job, not a refactor |
 | Cross-platform stays buildable | All three targets compile green in CI on every commit, from the first commit — divergence fails loudly rather than accumulating silently |
 | Cross-platform becomes real | Each platform ships once someone has actually run it. macOS first, since it is the only one currently testable; Windows and Linux follow as testers are found (B-070). "Untested" is an honest state; "assumed working" is not |
 
@@ -85,7 +98,7 @@ Two distinct workloads, and conflating them is the trap:
 | | **Personal database** (MVP) | **Reference database** (post-MVP) |
 |---|---|---|
 | Size | ~10,000 games | Millions (master games) |
-| Access | Read **and** write — import, edit, annotate, delete | Read-mostly, bulk-loaded, rarely edited |
+| Access | Read **and** write — import, edit, annotate, delete *(the MVP ships the read half only — B-050)* | Read-mostly, bulk-loaded, rarely edited |
 | Queries | Header search and filter | Position lookup, aggregate W/D/L statistics |
 | Needs a position index | No | Yes — it is the whole point |
 
@@ -101,8 +114,11 @@ confirmed at the gate.
 
 ## 8. Open questions
 
-1. **Where does annotation sit?** Read-only-first is much simpler, but a database you cannot
-   write notes into may not displace anything.
+1. ~~**Where does annotation sit?**~~ **Answered — the MVP is read-only** (B-050). The MVP's
+   job is to validate the import path and the look and feel; neither needs a write path. The
+   risk this question raised is real and now *deferred* rather than dismissed: a library you
+   cannot write into may not displace anything, so annotation (B-015) is the first milestone
+   after the MVP, and the schema is built to accept it. See §4.
 2. **Import fidelity vs. speed** — how much malformed real-world PGN do we accept, repair, or
    reject?
 3. **Do we bundle an engine** (e.g. Stockfish) or require the user to supply one? Bundling
