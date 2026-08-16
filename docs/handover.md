@@ -46,6 +46,16 @@ This session (all recorded as ADRs):
   import; TypeScript `chessops` owns the open game; `chessground` renders the board; no
   third-party Rust game tree (`sacrifice` / `rpgn` declined).
 
+- **Release sequencing: all three platforms remain the target; release order is gated by testing
+  capacity** (B-068). This is *not* a scope reduction — cross-platform stays a first-class goal.
+  The constraint is verification, not architecture: only macOS can currently be tested, so macOS
+  releases first, and Windows and Linux release as testers become available (B-070). All three
+  keep building in CI from day one (B-046, promoted to P1).
+
+  The vision's success criterion 6 conflates two things — *builds everywhere* and *verified
+  everywhere*. The first is a CI guarantee and stays true from the first commit; the second
+  needs people. Worth amending the criterion to separate them, so it stays measurable.
+
 **Working assumption for B-004, agreed but not yet gated:** one `games` table with hot header
 fields extracted into indexed columns *and* the original PGN text stored verbatim in the same
 row. Makes "zero data loss, round-trips cleanly" true by construction rather than by effort.
@@ -102,8 +112,12 @@ No notify-and-proceed choices made this session.
 6. **The reference database is a second product hiding inside the first.** Licensing and download
    size (B-043) are likely harder than the code. Keep it post-MVP; let it veto storage choices
    that would make it impossible.
-7. **Cross-platform is claimed from day one** but only stays true if all three OSes build early
-   (B-046).
+7. **Cross-platform is gated on testers, and testers were never planned for** (B-070). The goal
+   is unchanged and the architecture supports it; what's missing is anyone to verify Windows and
+   Linux. This is the risk most likely to be discovered late, because it looks like a release
+   task and is actually a recruiting one with a long lead time. Mitigations: three-OS CI from
+   the first commit (B-046), headless smoke tests (B-071), portability guardrails (B-069), and
+   starting on testers well before the builds are ready for them.
 8. **Packaging and distribution are routinely underestimated** (B-032).
 
 ## Next actions
