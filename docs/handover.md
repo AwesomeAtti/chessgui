@@ -3,27 +3,76 @@
 > The current state of the project. Update at the end of every session so the next session
 > (human or AI) can resume with zero chat history.
 
-**Last updated:** 2026-08-16 · **Updated by:** AI (Stage 1 / session 2) · **Kit version:** 0.2.0
-· **Head at session end:** `c84ade7`, plus uncommitted scope decisions and the B-048 write-up
+**Last updated:** 2026-08-16 · **Updated by:** AI (Stage 3 / session 3) · **Kit version:** 0.2.0
+· **Head at session start:** `ec76ee3` · **Session 3 is uncommitted** — see "Notes for the next
+session" for the `.git/index.lock` problem blocking the commit.
 
 ## Project summary
 
 `chessgui` — a modern, cross-platform (Windows / macOS / Linux) desktop chess database and
 chess GUI: import, search, organize, annotate, and analyze your own games locally, using
-UCI-compatible engines. Local-first, no account, no server. No product code yet; the stack is
-chosen and now measured — a throwaway spike proved it works and was deleted.
+UCI-compatible engines. Local-first, no account, no server. **Product code now exists**: a
+Tauri 2 + React 19 skeleton with a static board, a mock game list, and navigation.
 
 ## Current stage
 
-Stage 1 essentially complete; Stage 2 begun (`docs/tech-stack.md`). **All blocking gates are
-closed** — ADR-0001 (Tauri 2), ADR-0002 (GPL-3.0), ADR-0003 (chess libraries), ADR-0004
-(SQLite). B-048 passed, so the framework choice survived contact with a measurement.
-**Nothing is blocking implementation. The next session should be writing product code (B-054).**
+**Stage 3 — M1 skeleton, in progress.** All gates closed: ADR-0001 (Tauri 2), ADR-0002
+(GPL-3.0), ADR-0003 (chess libraries), ADR-0004 (SQLite), ADR-0005 (data model), ADR-0006
+(React 19).
+
+**The document-to-code ratio finally moved.** Session 3 wrote the first product code in the
+repository. Risk 5 is downgraded but not closed — see the risk register.
 
 ## Active work
 
-- Nothing in progress. B-048 is run and written up, B-004 is decided. Next is **B-054 — the M1
-  skeleton**, and it is the first product code in the repository.
+**B-054 — M1 skeleton is DONE.** The app runs on macOS with no errors, verified by the owner:
+library table renders, double-click opens a game in a tab, arrow keys step through the moves
+with the move list following, tabs open and close, the window resizes, the Info tab shows the
+retained PGN tags.
+
+A handful of secondary paths are unticked in `docs/milestones/m1-skeleton.md` — the filter box,
+Enter-to-open, Home/End, click-a-move, Accel+W, the on-screen move buttons. None blocking; a
+couple of minutes to check.
+
+**The layout took three attempts, and that is the story of this session.**
+
+**The layout took three attempts and the third was chosen properly rather than guessed.**
+Attempt one was two screens with navigation — "felt like a web page". Attempt two was
+master–detail, which the AI asserted was what applications in this category do; the survey
+later showed no dedicated chess database uses it. Both were rejected on sight.
+
+That prompted the process change below: **mock before coding**. A survey
+(`docs/ui-survey.md`), a workflows document (`docs/core-workflows.md`), four mocked structural
+options and two refinement rounds produced **ADR-0007 — layout C+**:
+
+- a pinned library tab plus game tabs
+- **the library tab is a single full-width table** — no side panel
+- **a game tab is a fluid board plus a fixed 320px panel**, built as header / scrolling body /
+  fixed footer, with a segmented control for tools
+
+The library panel was built twice and removed twice — first as a preview board (every game
+starts from the same position, so it showed the same thing for every row), then as a details
+panel (it duplicated the table's own columns and charged a fifth of the width for it). The
+lesson recorded in the ADR: **consistency of geometry is worth less than giving each view what
+it needs**, and borrowing a pattern from a survey is not the same as borrowing the reason it
+works.
+
+**State is modelled as a list on purpose.** `openGames` is an array with a per-entry ply, so
+the simpler single-board variant ("option E") remains a shell change rather than a rewrite.
+Components below `App.tsx` never decide their own placement — the moment one knows it lives in
+a tab, that reversibility is gone.
+
+**Mainline move navigation was added** (B-093), outside B-054's original scope, because a board
+that cannot move makes a layout impossible to judge and W3 makes move-stepping the most
+repetitive interaction in the product.
+
+**Frontend verified: typecheck, build and guardrails clean, and the PGN walker checked against
+fixtures** — a FEN/SetUp header, castling, an unfinished game, and an illegal move mid-game
+(truncates rather than throwing). Worth noting one near-miss: a fixture appeared to expose a
+bug in the walker and turned out to be an illegal position I had written myself. Verify the
+fixture before believing the failure.
+
+**Nothing is in progress. M2 starts next.**
 
 ## Decided
 
@@ -100,6 +149,67 @@ Session 2:
 B-050 was recorded as a decision rather than an ADR — it is a scope choice, reversible by
 building B-015.
 
+Session 3:
+
+- **ADR-0006 — Frontend framework: React 19**, with Vite 8. ADR-0001 said "TypeScript frontend"
+  and never named a framework; the gap survived two sessions because no code existed to expose
+  it. Raised as a hard stop before the first component was written.
+  **The deciding argument was consistency with ADR-0003, not any property of React**: that ADR
+  committed us to buying the hard problems, and the virtualised 10k-row game list (B-008,
+  B-033) is the same kind of hard problem that `chessground` was, with TanStack as the same
+  kind of off-the-shelf answer. Secondary: the contributor pool matters once the repo is public
+  (B-031, B-070).
+  **Explicitly not decided on performance grounds.** The "lighter runtime protects the frame
+  budget" argument was set aside as unmeasured — B-048 showed 17.0 ms median and p95 with
+  headroom. Per risk 9, an unbenchmarked performance claim was not allowed to carry a decision.
+- **ADR-0005 — the game data model.** B-058, B-059, B-060 all closed. Players get their own
+  table with a derived, lossy `normalisedName`; dates are stored raw *and* parsed with nullable
+  year/month; the full tag set is retained as JSON and `result` is an integer. One rule
+  underneath all three: **store the raw thing, derive the useful thing, index the derived
+  thing** — which is what makes B-078's derivability true by construction.
+  **The model was decided now even though M1 has no database**, because the mock list has a
+  shape and an unchosen shape becomes the schema by default once B-007 imports real PGN.
+- **TypeScript pinned to 5.9, not the current 7.x** (notify-and-proceed). TS 7 is the Go rewrite
+  and is `latest` on npm, but it is a rewritten compiler at `.0.2` whose selling point is
+  compile speed — irrelevant at four source files. Recorded in `docs/tech-stack.md`.
+- **Source layout established and recorded** in `docs/tech-stack.md`, per AGENTS.md. Feature
+  grouping under `src/features/`, with four load-bearing boundaries: `src/shell/` (the only
+  Tauri-aware code), `src/i18n/` (every user-facing word), `useChessground.ts` (the only
+  React↔chessground seam), and `App.tsx` (the only component that knows the layout exists).
+  Rearranging this is now a hard stop.
+- **ADR-0007 — application layout: C+.** A pinned library tab plus game tabs; one geometry
+  everywhere (fluid left region, fixed 320px panel); the panel built as header / scrolling body
+  / fixed footer. Decided from a survey, a workflows document and mocked options rather than
+  from taste. Two principles worth carrying: **fixed measure for text, fluid for graphics** —
+  which is why the panel never resizes and the board is sized by `ResizeObserver` — and **the
+  window is the viewport**, which depends on `min-height: 0` on every ancestor of a scrolling
+  region.
+
+## Process change made this session
+
+**UI layout is mocked and approved before it is coded.** Added to `AGENTS.md` (mandatory
+behaviors) and `ai/methodology.md` (its own section, with the reasoning).
+
+The trigger: two layouts were coded and both were rejected, in one session. The diagnosis is
+that layout is subjective and cannot be reasoned to, so the build → dislike → rebuild loop does
+not converge — "I don't like it" is not a bug report and should not have to be. Mocking moves
+iteration from minutes per round to seconds per round.
+
+Three parts to the rule: survey the established products first where the category exists; show
+**two or more genuinely different** options rather than one proposal to react to; structure-only
+fidelity so the conversation stays on layout rather than colour.
+
+Two related corollaries, both also recorded:
+
+- **A green build does not verify a layout.** Anything with a visual acceptance criterion is
+  unverified until a human looks, and the AI must say plainly what it could not check.
+- **Beware "this is what applications like this do."** That exact claim was made about
+  master–detail this session and the survey did not support it — no dedicated chess database
+  uses it. An unchecked category claim is a preference wearing a costume.
+
+**These lessons are general, not chess-specific — backport them to the starter kit (B-088).**
+The kit is at 0.2.0.
+
 ## Standing constraints
 
 - **Keep the frontend Electron-portable.** All shell/IPC calls go through a single frontend
@@ -117,8 +227,70 @@ building B-015.
   truth; import is idempotent; dropping and rebuilding the DB is a supported path. This is the
   condition the whole storage decision rests on — if it lapses quietly, the gate re-hardens and
   nobody notices.
+- **`src/shell/` is the only place `@tauri-apps/api` may be imported** (ADR-0001). This is the
+  concrete form of the Electron-portability constraint above, and it is now enforced by
+  `npm run check:i18n` in CI rather than by remembering.
+- **chessground owns its own DOM subtree.** `src/features/board/useChessground.ts` is the only
+  React↔chessground seam, and its container div must never be given React children. If that
+  slips, React and chessground fight over the same nodes and the symptom — pieces vanishing on
+  unrelated state changes — looks nothing like the cause.
+- **The source layout is now established** (`docs/tech-stack.md`). Per AGENTS.md, restructuring
+  it is a hard stop.
+- **Store the raw thing, derive the useful thing** (ADR-0005). Derived values are never
+  authoritative, so a wrong derivation rule is a re-import rather than data loss.
 
 ## Recently completed
+
+Session 3:
+
+- **First product code in the repository.** Tauri 2 shell (`src-tauri/`, standard lib/bin
+  split), React 19 + Vite 8 frontend, `chessground` board rendering a static FEN validated by
+  `chessops`, a four-row mock game list, and navigation between them.
+- **`docs/milestones/m1-skeleton.md` written**, including an explicit out-of-scope list. Its
+  central point: M1 is not about the two screens, it is about three structural things that are
+  free now and expensive later.
+- **All three structural guardrails landed with the first screen, not after it:**
+  - **B-072** — `i18next` with *typed keys*, so a misspelt key is a compile error rather than a
+    raw key shipped to a user. `Intl`-based date formatting and collation in
+    `src/i18n/format.ts`. Rust returns `AppError { code, detail }`; no English crosses IPC.
+  - **The IPC adapter** — `src/shell/ipc.ts` is the only module allowed to import
+    `@tauri-apps/api`, which is what keeps ADR-0001 reversible. It also degrades outside Tauri
+    so the app runs in a plain browser, which is the B-077 control habit built in.
+  - **B-069** — `src/shell/platform.ts` holds accel-key, path separator, and line-ending
+    differences behind one boundary.
+- **`npm run check:i18n` — the guardrails are enforced in CI, not by memory.** Fails the build
+  on a user-facing literal in a component or a `@tauri-apps/api` import outside `src/shell/`.
+  **Two things about this script are worth carrying forward.** It parses with the TypeScript
+  compiler API because the first regex version immediately produced three false positives by
+  reading `=>` and `<` as JSX delimiters — and a guardrail that cries wolf gets switched off,
+  which is worse than not having one. And it was verified with a **negative control**: a
+  deliberately planted literal, confirmed to fail, then removed. B-077's lesson applied to
+  something other than a benchmark.
+- **B-046 — three-OS CI workflow added.** Frontend job (guardrails → typecheck → build) gating
+  a `cargo build` matrix over macOS, Ubuntu 22.04, and Windows, with `fail-fast: false` so a
+  break is identifiable as platform-specific or universal. **Never run** — status is
+  in-progress, not done.
+- **B-065 done** — SPDX `GPL-3.0-or-later` in both manifests from the commit that created them,
+  so no window existed where the repo held code without a declared licence.
+- **B-058, B-059, B-060 closed** via ADR-0005. **B-080 – B-083 added.**
+- **The Tauri icon trap was pre-empted** — `src-tauri/icons/icon.png` is generated and in place,
+  so the proc-macro failure that bit the B-048 spike cannot recur.
+- **`docs/tech-stack.md` updated** — stale `Storage: Undecided` row corrected to SQLite,
+  framework and build-tool rows added, source layout recorded.
+- **`docs/ui-survey.md` written** — how ChessBase, Scid vs. PC, Lichess, chess.com and En
+  Croissant lay out a database, board and moves, and what the community criticises. The
+  decisive finding: **the whole category makes layout configurable**, because it is genuinely
+  subjective. Two rejected layouts is the expected cost of seeking one right answer.
+- **`docs/core-workflows.md` written (B-053 done)** — six journeys. It paid for itself within
+  the hour: testing the chosen layout against W2 exposed a scan-and-reject loop that plain tabs
+  make expensive. Two fixes were tried in the library panel and both removed; the answer was
+  that W2 needs nothing added, because the columns that identify a game are already the table's.
+- **ADR-0007 written and built.** Shell rebuilt: `TabBar`, `SidePanel`, `LibraryView`,
+  `GameView`, `GameInfo`, `mainline.ts`. `useSplitter` and the old `GameList` deleted — the
+  panel is a fixed width now, so there is nothing to drag.
+- **B-093 added and built** — mainline navigation. **B-086 partly done** — arrow keys and Enter
+  in the library, Accel+W to close a tab, routed through `platform.ts`.
+- **B-090 – B-092 added** — narrow windows, board size ceiling, focus mode.
 
 Session 2:
 
@@ -154,10 +326,9 @@ Session 1:
 
 ## Open decisions
 
-- **Schema shape — B-058 (player table + name normalisation), B-059 (partial dates), B-060
-  (full tag set as JSON).** ADR-0004 downgraded the *engine* decision, not these. They get baked
-  into import code and every query, and are expensive to change no matter what sits underneath.
-  Decide them at B-054, deliberately.
+- **B-049 — PGN import fidelity: accept / repair / reject malformed input.** Now the most
+  urgent open decision, because it is the one B-007 cannot start without. Interacts with B-073:
+  the policy has to say what happens when a German export contains `Sf3` instead of `Nf3`.
 - **B-006 — Engine process management & UCI transport.** Escalates to a platform-surface
   commitment only if an engine binary is bundled. Not triggered by M1. The B-048 spike already
   demonstrated the transport half working (spawn, stdin/stdout, throttled emit, clean kill with
@@ -183,11 +354,19 @@ Session 1:
    small — forkable if needed — but worth knowing rather than discovering.
 4. **Two chess rule implementations must agree** (shakmaty and chessops). Accepted cost of the
    ADR-0003 split; tracked as B-064.
-5. **Vision quality was becoming a trap; the spike broke the pattern but did not cure it.**
-   Something finally ran. The count is now fourteen documents and one *discarded* executable —
-   the project still has no product code. **Every gate is now closed, so deliberation has run
-   out of legitimate excuses.** If the next session produces another document instead of B-054,
-   this is no longer a risk but a diagnosis.
+5. **Documentation-as-substitute-for-code: effectively closed, and it closed by being tested.**
+   The app runs. More to the point, **running it immediately invalidated a design decision that
+   had survived a specification, a milestone document, and a code review** (B-084). The screen
+   model was wrong and nobody noticed until a window opened. Keep the general form of this:
+   deliberation did not catch it and one minute of use did. The remaining edge of the risk is
+   that session 3 still produced two ADRs and three documents alongside the code — the ratio is
+   better, the habit is intact.
+
+11. **Layout decisions are being made without the document that was supposed to inform them.**
+    B-053 (core workflows) is the last Stage 1 deliverable, has been deprioritised twice as "not
+    on the critical path", and its stated purpose is to feed the skeleton's screen list. B-084
+    is what that costs. The same gap is waiting at B-008 and B-010, where the screens are bigger
+    and the rework is not four components.
 6. **The reference database is a second product hiding inside the first.** Licensing and download
    size (B-043) are likely harder than the code. Keep it post-MVP; let it veto storage choices
    that would make it impossible.
@@ -214,24 +393,25 @@ Session 1:
 
 ## Next actions
 
-1. **B-054 — M1 skeleton.** First product code. Window, static board from a FEN, mock game list,
-   navigation. Write `docs/milestones/m1-skeleton.md` first. Three things get established here
-   or get lost, all structural and all cheap only if present from the first screen:
-   **B-072** (message catalogue — no user-facing string literals), **B-069** (portability
-   guardrails — paths, shortcuts, dialogs behind abstractions), and the single frontend IPC
-   adapter that keeps ADR-0001 reversible. **B-065** (SPDX) unblocks the moment the manifests
-   exist. Decide B-058 – B-060 as part of this.
-2. **B-046** — three-OS CI. Cheap, and it is what makes the amended cross-platform criterion
-   true rather than aspirational. Best done with the skeleton, while there is almost nothing to
-   compile and failures are trivial to diagnose.
-3. **`docs/architecture.md`** — the remaining half of B-055. Carry the B-067 throttling rule
-   across from `tech-stack.md` and record the layout the skeleton actually uses.
+1. **Check the CI run.** Session 3's push is the first time `.github/workflows/ci.yml` has ever
+   executed. Expect it to need a fix or two — that is what it is for. Windows and Linux
+   compiling is the only cross-platform guarantee this project currently has (B-046, B-068).
+2. **Tick the remaining M1 boxes** in `docs/milestones/m1-skeleton.md` — five minutes, and it
+   closes the milestone honestly rather than by assertion.
+3. **B-080** — add `cargo fmt --check` and clippy to CI, once `cargo fmt` has been run locally
+   at least once.
+4. **`docs/architecture.md`** — the remaining half of B-055. Carry the B-067 throttling rule
+   across from `tech-stack.md`. The layout is already recorded in `tech-stack.md`, so this file
+   is now about component boundaries and data flow rather than directories.
+5. **B-053 — core workflows.** Now genuinely on the critical path, because B-084 demonstrated
+   what happens without it. 4–6 end-to-end journeys, which is what should have produced the
+   screen list in the first place. Do this *before* B-008 and B-010 design their screens.
+6. **Then M2.** The critical path runs **B-049** (fidelity policy — must be written down before
+   any import code) → **B-007** (PGN import) → **B-011** (persistence, where the ADR-0005
+   migration is finally written) → **B-008/B-010** (list and search, where TanStack arrives).
 
-`B-053` (core workflows doc) is the remaining Stage 1 deliverable but is not on the critical
-path. `B-065` (SPDX identifiers) unblocks once manifests exist at B-054.
-
-**The spike ran, passed, and was thrown away — as designed.** The next thing that runs should be
-something that survives: B-054, the M1 skeleton.
+**The skeleton is written but has never run.** The next thing this project needs is not another
+decision — it is a window with a chessboard in it.
 
 ## Notes for the next session
 
@@ -248,15 +428,78 @@ something that survives: B-054, the M1 skeleton.
 - `.DS_Store` files exist in the working tree and are correctly covered by `.gitignore`.
 - **Session 1 committed in four increments:** `9260026` (ADRs), `6cc166f` (licence), `4f67976`
   (spike spec + platform dependency), `d86bc66` (vision amendment), plus `c84ade7` (handover).
-- **Session 2 is uncommitted at time of writing:** vision amendments, backlog B-050/B-072–B-077,
-  `docs/tech-stack.md`, and this handover.
+- **Session 2 *was* committed** — `f2830a3`, `3c11413`, `ec76ee3`. The previous handover said it
+  was uncommitted; that was written before the commits and never corrected. Corrected here.
+- **Sessions 1 and 2 were committed but never pushed.** `origin/main` sat at `737ece4` — the
+  repo-setup commit — while eight commits accumulated locally. The handover said "public-facing
+  on GitHub from commit one", which was true of intent and not of fact. Session 3's push is the
+  first time any of the ADRs, the vision amendments or any code reached GitHub. Worth checking
+  `git log origin/main..HEAD` at the end of a session, not just `git status`.
+- **Privacy scan run before the push** (session 3), over the working tree, every untracked
+  file, and every commit in history. Clean: no home paths, no secret-shaped strings, no stray
+  `.env`/`.pem`/`.DS_Store`/database files ever committed. Exactly two email addresses appear
+  anywhere — the pseudonymous GitHub no-reply used as the commit identity, and
+  `user@example.com`, the documented placeholder. All commits are authored by the single
+  pseudonymous identity. **What the scan cannot see** is anything GitHub-side: repository
+  visibility, description, topics, the account's own profile, or any fork. Check those in the
+  browser before treating the repo as safely public (B-031).
+- **The mysterious `.git/index.lock` is solved: the AI causes it.** Every `git status` run from
+  the sandbox refreshes the index, writes `index.lock`, and then cannot unlink it because the
+  sandbox has no delete permission — leaving a stale lock that blocks the *next* git command.
+  It is not corruption and nothing is wrong with the repository. **Rule: the AI should avoid
+  running git from the sandbox**, and use `git status --short` only when needed, expecting to
+  clean up after. `rm -f .git/index.lock` from a real terminal clears it. (Delete permission was
+  granted for this folder mid-session, which also resolves it.)
+- **Session 3 was committed and pushed** in seven increments (see `git log`). The split keeps
+  the layout *reasoning* separate from the layout *code*, because the reasoning is the more
+  valuable half. Original plan, for reference:
+  1. ADR-0005 + ADR-0006 + `m1-skeleton.md` + `tech-stack.md` + `README.md` (decisions)
+  2. scaffold + guardrails + skeleton UI + `Cargo.lock` (the code)
+  3. `.github/workflows/ci.yml`
+  4. `AGENTS.md` + `ai/methodology.md` — the mock-before-code rule (process)
+  5. `docs/ui-survey.md` + `docs/core-workflows.md` + ADR-0007 (the layout decision)
+  6. the C+ shell rebuild
+  7. backlog + handover
+
+  Splitting 5 from 6 is worth doing: it keeps "here is why the layout is this shape" separate
+  from "here is the shape", and the reasoning is the more valuable half.
+- **Check `git status` before staging.** Untracked `dist/` and `node_modules/` are present and
+  covered by `.gitignore`, but this is the first session where a blind `git add -A` could do
+  real damage. `package-lock.json` *should* be committed.
+- **The AI sandbox cannot delete files.** This bit twice in session 3: `npm run build` fails at
+  the point where Vite tries to empty an existing `dist/` (the build itself is fine — verified
+  by building to a fresh output path), and the git lock above. Not a code problem; do not
+  "fix" it in the build config.
 - **The B-048 spike was built and run outside this repo and is not tracked here.** Nothing from
   it should be committed. If a `spike/` directory turns up inside the repo, it is a mistake.
 - **Practical note on running spikes:** the AI environment is a Linux sandbox with no Rust
   toolchain, so anything requiring `cargo` or a macOS window has to be run by hand in a real
-  terminal. Expect that split on any future spike. Two things bit us and will bite again —
-  Tauri needs `src-tauri/icons/icon.png` to exist or the build fails in a proc macro, and
-  macOS Low Power Mode silently invalidates performance measurements.
+  terminal. **This is now permanent, not spike-specific** — every session from here produces
+  Rust that only you can compile. Plan for the AI to deliver frontend work verified and Rust
+  work unverified, and say so in the handover each time rather than implying otherwise.
+  `src-tauri/icons/icon.png` is now in place, so that particular proc-macro failure is handled;
+  macOS Low Power Mode still silently invalidates performance measurements.
+- **Mock data uses invented player names on purpose.** Real players would have been easier and
+  are exactly the habit that eventually puts a real name in a commit. The fixtures instead carry
+  the awkward cases deliberately: accents, Cyrillic, the same person written two ways, a fully
+  unknown date, and an unfinished game.
+- **`npm run check:i18n` is a real gate, not decoration.** If it starts failing, fix the code
+  rather than the script. If it produces a false positive, fix the script properly — the whole
+  value of the thing is that it is trustworthy.
+- **The layout rule is one sentence: the window is the viewport.** The shell is exactly one
+  screen tall, the document never scrolls, and any pane that overflows scrolls its own body.
+  Nearly everything that makes a desktop app feel like a web page is a violation of it. Note
+  that this depends on `min-height: 0` on every ancestor of a scrolling pane — CSS grid and
+  flex children default to `min-height: auto` and refuse to shrink, which is the single most
+  common way this rule breaks silently.
+- **Board sizing is JavaScript, not CSS, on purpose** (`useChessground.ts`). A `ResizeObserver`
+  measures the pane and sets pixel dimensions, floored to a multiple of 8 so squares are even.
+  Do not "simplify" this into `aspect-ratio` + container queries without testing WebKitGTK
+  first — that is precisely the untested platform (B-066).
+- **Layout is in scope for M1; visual design is not.** Panes, splitters, scroll containers,
+  selection states and hit areas are structural and expensive to change later. Palettes, board
+  and piece theming, and type scale are B-024 and remain deliberately absent. If the app still
+  looks plain, that is the intended state, not an oversight.
 - **Start the next session with `ai/prompts/session-start.md`.** This file plus `docs/backlog.md`
   should be sufficient — if the next session has to ask something that was settled here, this
   handover failed and is worth fixing rather than working around.

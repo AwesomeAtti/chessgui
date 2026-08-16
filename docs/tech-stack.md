@@ -8,13 +8,23 @@
 | Layer | Choice | Source |
 |---|---|---|
 | Desktop shell | Tauri 2 | ADR-0001 |
-| Frontend language | TypeScript | ADR-0001 |
+| Frontend language | TypeScript (5.9, not 7 — see below) | ADR-0001 |
+| Frontend framework | React 19 | ADR-0006 |
+| Build tool | Vite 8 | notify-and-proceed, session 3 |
 | Board rendering | `chessground` | ADR-0003 |
 | Rules & move legality (frontend) | `chessops` | ADR-0003 |
 | PGN parsing & bulk import (backend) | `pgn-reader` + `shakmaty` (Rust) | ADR-0003 |
 | Game tree | Our own | ADR-0003 |
-| Storage | Undecided | B-004 |
+| Storage | SQLite | ADR-0004 |
+| Data model | Players table, dual dates, JSON tag set | ADR-0005 |
+| i18n | `i18next` + `react-i18next` | B-072 |
 | Licence | GPL-3.0-or-later | ADR-0002 |
+
+**TypeScript is pinned to 5.9, not the current 7.x.** TS 7 is the Go rewrite and is `latest`
+on npm, but it is a rewritten compiler at `.0.2`, and its selling point is compile speed — which
+is not a constraint on a project with four source files. Adopting it is a one-line change
+whenever we want it; recovering from a compiler bug in a project with a bus factor of one is
+not. Revisit once it has a few minor versions behind it.
 
 ## B-048 — webview under engine load
 
@@ -122,6 +132,67 @@ indistinguishable. Not worth deciding until there is a real analysis panel to ju
 
 **Generalise it.** This is the answer for any high-frequency backend→frontend stream, not just
 engine output — import progress over a 10,000-game PGN is the next obvious case.
+
+## Source layout (established at B-054)
+
+Recorded here per AGENTS.md: state the layout, then don't rearrange it. Restructuring an
+established layout is a hard stop.
+
+```
+/
+├── index.html              vite entry
+├── package.json            SPDX GPL-3.0-or-later (B-065)
+├── scripts/
+│   └── check-no-literals.mjs   CI guardrail for B-072 + the IPC boundary
+├── src/                    React frontend
+│   ├── main.tsx            root render; imports chessground stylesheets
+│   ├── App.tsx             shell: tab state, kept deliberately thin (ADR-0007)
+│   ├── features/           grouped by feature, not by file type
+│   │   ├── board/          BoardView + useChessground (the vanilla-DOM escape hatch)
+│   │   ├── game/           GameView, GameInfo, mainline.ts (PGN → a FEN per ply)
+│   │   ├── library/        LibraryView — filter bar and full-width games table
+│   │   ├── moves/          MoveList
+│   │   └── shell/          TabBar (document tabs) + SidePanel (the fixed column)
+│   ├── i18n/               message catalogue, typed keys, Intl formatters
+│   ├── model/              the ADR-0005 data model
+│   ├── mock/               placeholder data, deleted at B-007
+│   └── shell/              ipc.ts + platform.ts — the only Tauri-aware code
+└── src-tauri/              Rust side, standard Tauri 2 lib/bin split
+    ├── Cargo.toml          SPDX GPL-3.0-or-later (B-065)
+    ├── icons/icon.png      must exist or the build fails in a proc macro
+    └── src/{main,lib}.rs
+```
+
+Three boundaries in that tree are load-bearing rather than tidy:
+
+- **`src/shell/` is the only place `@tauri-apps/api` may be imported.** This is what keeps
+  ADR-0001 reversible. Enforced in CI, not by memory.
+- **`src/i18n/` owns every user-facing word** (B-072). Also enforced in CI.
+- **`src/features/board/useChessground.ts` is the only React↔chessground seam.** chessground
+  mutates its own DOM subtree; React must never reconcile it. The container div has no React
+  children, deliberately.
+- **`App.tsx` is the only component that knows the layout exists.** Everything below it
+  receives data and size and never decides its own placement. This is what keeps ADR-0007
+  reversible toward the simpler "option E" shell — the moment a component knows it lives in a
+  tab, that reversibility is gone.
+
+Two layout invariants that are easy to break silently:
+
+- **The window is the viewport.** The shell is one screen tall, the document never scrolls, and
+  panes scroll their own bodies. This depends on `min-height: 0` on *every* ancestor of a
+  scrolling region — grid and flex children default to `min-height: auto` and refuse to shrink.
+- **Fixed measure for text, fluid for graphics.** The side panel is a fixed 320px; the board
+  and the table absorb all resize. This is why the board is sized by `ResizeObserver` rather
+  than by CSS.
+
+### The guardrail script earns its place
+
+`npm run check:i18n` parses with the TypeScript compiler API rather than regexes. The first
+version used regexes and immediately produced three false positives by reading `=>` and `<` as
+JSX delimiters. Worth recording because the lesson generalises: **a guardrail that cries wolf
+gets switched off**, which is worse than not having one. It was also verified with a negative
+control — a deliberately planted literal, confirmed to fail the check — which is the B-077
+habit applied to something other than a benchmark.
 
 ## Notes
 

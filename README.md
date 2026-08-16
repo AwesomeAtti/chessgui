@@ -79,14 +79,19 @@ Recorded as ADRs in [`docs/adr/`](docs/adr/):
 | UI framework / desktop shell | Tauri 2 with a TypeScript frontend | [ADR-0001](docs/adr/0001-ui-framework-tauri.md) |
 | Licence | GPL-3.0-or-later | [ADR-0002](docs/adr/0002-licence-gpl3.md) |
 | Chess rules, PGN handling, board | `shakmaty` + `pgn-reader` (Rust, import) · `chessops` (TS, open game) · `chessground` (board) | [ADR-0003](docs/adr/0003-chess-libraries.md) |
+| Local storage | SQLite | [ADR-0004](docs/adr/0004-storage-sqlite.md) |
+| Game data model | Players table · raw + parsed dates · full tag set as JSON | [ADR-0005](docs/adr/0005-game-data-model.md) |
+| Frontend framework | React 19 with Vite | [ADR-0006](docs/adr/0006-frontend-framework-react.md) |
+| Application layout | Pinned library tab · fluid board · fixed side panel | [ADR-0007](docs/adr/0007-application-layout.md) |
 
 ## Decisions pending
 
-Two gates remain. See `docs/backlog.md`:
+No gate blocks implementation. Remaining open questions, see `docs/backlog.md`:
 
-- **B-004** — local storage / database engine (hard stop)
+- **B-049** — PGN import fidelity: accept, repair, or reject malformed input
 - **B-006** — engine process management and UCI transport
 - **B-051** — bundle an engine, or require the user to supply one
+- **B-031** — when the repository goes public
 
 ## Licence
 
