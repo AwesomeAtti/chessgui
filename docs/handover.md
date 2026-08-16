@@ -4,6 +4,7 @@
 > (human or AI) can resume with zero chat history.
 
 **Last updated:** 2026-08-16 · **Updated by:** AI (Stage 1 / kick-off session) · **Kit version:** 0.2.0
+· **Head at session end:** `d86bc66`
 
 ## Project summary
 
@@ -52,9 +53,10 @@ This session (all recorded as ADRs):
   releases first, and Windows and Linux release as testers become available (B-070). All three
   keep building in CI from day one (B-046, promoted to P1).
 
-  The vision's success criterion 6 conflates two things — *builds everywhere* and *verified
-  everywhere*. The first is a CI guarantee and stays true from the first commit; the second
-  needs people. Worth amending the criterion to separate them, so it stays measurable.
+  The vision's old success criterion 6 conflated two things — *builds everywhere* and *verified
+  everywhere*. **Amended this session** into two separate, measurable criteria: all three
+  targets compile green in CI from the first commit; each platform ships once someone has
+  actually run it.
 
 **Working assumption for B-004, agreed but not yet gated:** one `games` table with hot header
 fields extracted into indexed columns *and* the original PGN text stored verbatim in the same
@@ -76,9 +78,16 @@ No notify-and-proceed choices made this session.
 
 - Stage 1 kick-off review: read `AGENTS.md`, `ai/methodology.md`, `README.md`, vision, backlog,
   handover. Summarised state, risks, quick wins, and gates.
-- **B-003, B-005, B-052 closed** — ADR-0001, ADR-0003, ADR-0002 written.
-- Backlog grown from 39 to 55 items (B-048 – B-064 added across two passes); B-002 corrected to
-  `done`.
+- **B-003, B-005, B-052 closed** — ADR-0001, ADR-0003, ADR-0002 written (commit `9260026`).
+- **B-057 done** — `COPYING` added with verbatim GPL-3.0 text from the FSF, verified at 674
+  lines / 35,149 bytes. In place *before* any GPL dependency exists (commit `6cc166f`).
+- **B-048 specced** — `docs/feature-specs/b048-webview-engine-spike.md`, with pass/fail
+  thresholds agreed in advance. Platform verification dependency recorded as B-068 – B-071
+  (commit `4f67976`).
+- **Vision amended** — cross-platform split into buildability vs. verification (commit
+  `d86bc66`).
+- `README.md` updated with a decisions-made table and a licence section.
+- Backlog grown from 39 to **71 items**; B-002 corrected to `done`.
 
 ## Open decisions
 
@@ -95,9 +104,12 @@ No notify-and-proceed choices made this session.
 
 ## Risks
 
-1. **WebKitGTK on Linux is now the top technical risk.** The framework is chosen, so the open
-   question is narrower and sharper: does chessground stay smooth in WebKitGTK while a UCI
-   engine floods stdout? B-048 exists to answer exactly this. Tauri is reportedly moving toward
+1. **WebKitGTK on Linux remains unverified, and B-048 will not close it.** The spike runs on
+   macOS (WKWebView), so it validates the throttling architecture and the chessground/Stockfish
+   plumbing but not WebKitGTK's frame pacing. Closing this is **B-066**, blocked on B-070
+   (testers). Note the reframe in the spike spec: the dominant risk is flooding the IPC boundary
+   with per-line engine events, which would melt any webview including Chromium — throttling in
+   Rust (B-067) addresses it, and that is webview-independent. Tauri is reportedly moving toward
    a Chromium-based Linux webview — treat as upside, not as a plan.
 2. **"Modern" is still an adjective, not a spec.** B-024 sits at P2, which schedules the vision's
    central claim last. The web frontend makes it cheaper to deliver; it does not make it happen.
@@ -122,16 +134,22 @@ No notify-and-proceed choices made this session.
 
 ## Next actions
 
-1. **B-057** — add `COPYING` (full GPL-3.0 text) and SPDX identifiers, *before* the first
-   dependency lands.
-2. **B-048** — the spike: chessground rendering and drag-interaction inside WebKitGTK on Linux
-   while a Stockfish subprocess floods stdout over Tauri IPC. Timeboxed to a day, thrown away
-   afterwards. This is the one result that could invalidate ADR-0001.
-3. **B-004** — run the storage gate once the spike is in.
-4. Then **B-054** (M1 Skeleton) and **B-055** (`tech-stack.md`, `architecture.md`).
+1. **B-048 — run the spike.** Spec and pass/fail thresholds are already written; read
+   `docs/feature-specs/b048-webview-engine-spike.md` and build to it. Needs a locally supplied
+   Stockfish binary (bundling is B-051, undecided), plus Rust and Node toolchains. **Build it
+   outside this repo**, in a throwaway directory — only the findings and the throttling design
+   come back, into `docs/tech-stack.md`.
+2. **B-004** — run the storage gate once the spike is in. Include the schema questions
+   (B-058 – B-062).
+3. **B-054** (M1 Skeleton) and **B-055** (`tech-stack.md`, `architecture.md`).
+4. **B-046** — three-OS CI. Cheap, and it is what makes the amended cross-platform criterion
+   true rather than aspirational.
 
 `B-053` (core workflows doc) is the remaining Stage 1 deliverable but is not on the critical
-path.
+path. `B-065` (SPDX identifiers) unblocks once manifests exist at B-054.
+
+**This project has produced twelve documents and zero executables.** The next session should
+end with something that runs. That is the point of B-048 being first.
 
 ## Notes for the next session
 
@@ -146,5 +164,9 @@ path.
   addresses, or absolute paths containing a home directory. The placeholder in
   `ai/prompts/session-start.md` is left unfilled on purpose; supply the project path in chat.
 - `.DS_Store` files exist in the working tree and are correctly covered by `.gitignore`.
-- **Nothing has been committed this session.** Three new ADRs, an updated backlog, and this file
-  are uncommitted. Commit before starting new work.
+- **Session committed in four increments:** `9260026` (ADRs), `6cc166f` (licence), `4f67976`
+  (spike spec + platform dependency), `d86bc66` (vision amendment). Only this handover update
+  remains uncommitted.
+- **Start the next session with `ai/prompts/session-start.md`.** This file plus `docs/backlog.md`
+  should be sufficient — if the next session has to ask something that was settled here, this
+  handover failed and is worth fixing rather than working around.
