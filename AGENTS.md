@@ -44,8 +44,17 @@ the task needs them** — don't load everything every session.
   is not an exception. Use obvious placeholders (`YOUR_API_KEY_HERE`, `user@example.com`),
   keep real values in an untracked `.env`, and check `git status` before staging. If something
   leaks, rotate it first, then remove it.
+- **Mock UI layout before coding it.** Anything that decides screen structure — pane
+  arrangement, navigation model, what is visible at once — gets shown as a throwaway mockup and
+  approved *before* it is built. Show two or more genuinely different options, not one proposal
+  to react to. Layout is subjective and cannot be reasoned to; the loop of build → dislike →
+  rebuild is slow and does not converge. Visual styling is not covered by this rule; structure
+  is. Where an established product category exists, survey it first — real products are better
+  evidence than the AI's taste.
 - **Verify before claiming done.** Run the build/tests and confirm the thing actually loads or
-  runs. "It should work" is not done.
+  runs. "It should work" is not done. **Anything whose acceptance is visual is not verified
+  until a human has looked at it** — a clean build says nothing about whether the layout is
+  right.
 - **Commit at checkpoints.** Propose a small, clearly-described git commit after each working
   increment. The working tree is the real save state.
 

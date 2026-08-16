@@ -121,6 +121,41 @@ stopping there and moving on. Record the remaining 20% in the backlog.
 functionality (logic, persistence) → Phase 3 hardening (tests, reliability) → Phase 4
 optimization (performance, refinement).
 
+## UI layout is mocked before it is coded
+
+Layout decisions — pane arrangement, navigation model, what is visible at the same time — are
+**subjective and cannot be reasoned to**. They are also expensive to change once built, because
+every component ends up encoding assumptions about who owns the viewport.
+
+So they get a different process from the sizing tiers above:
+
+1. **Survey first, if the product category already exists.** How do the established tools solve
+   it, and where do they disagree with each other? Real products are better evidence than the
+   AI's taste, and the disagreements tell you which parts are genuinely matters of preference.
+2. **Show two or more genuinely different options**, as throwaway mockups. Not one proposal to
+   react to — a single option invites "yes, fine" rather than a real choice, and gives no
+   vocabulary for what is wrong with it.
+3. **Structure-only fidelity by default.** Grey boxes and real proportions with real data. It
+   keeps the conversation on layout instead of colour, which is a separate decision.
+4. **Approve, then build once.**
+
+The mockups are disposable and belong outside the source tree, like a spike.
+
+**Why this is a rule and not a preference.** The alternative loop is: the AI guesses, codes the
+guess, the human dislikes it, the AI guesses again. That loop is slow, expensive, and does not
+converge, because "I don't like it" is not a bug report and should not have to be. Mocking moves
+the iteration from minutes-per-round to seconds-per-round, which is the only thing that makes
+subjective decisions tractable.
+
+**Corollary for verification.** A clean build tells you nothing about whether a layout is right.
+Anything whose acceptance criterion is visual is not verified until a human has looked at it —
+and if the AI cannot run the UI itself, it must say plainly which parts remain unverified rather
+than implying the work is done.
+
+**A caution about categories.** Watch for asserting that some pattern is "what applications like
+this do". If that claim has not been checked against actual products, it is a preference wearing
+a costume.
+
 ## Decision Gates
 
 Gates exist for decisions that are **expensive to reverse**. If a choice can be undone in an
