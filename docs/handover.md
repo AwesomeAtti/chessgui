@@ -3,114 +3,134 @@
 > The current state of the project. Update at the end of every session so the next session
 > (human or AI) can resume with zero chat history.
 
-**Last updated:** 2026-08-16 · **Updated by:** AI (Stage 0 session) · **Kit version:** 0.2.0
+**Last updated:** 2026-08-16 · **Updated by:** AI (Stage 1 / kick-off session) · **Kit version:** 0.2.0
 
 ## Project summary
 
 `chessgui` — a modern, cross-platform (Windows / macOS / Linux) desktop chess database and
 chess GUI: import, search, organize, annotate, and analyze your own games locally, using
-UCI-compatible engines. Local-first, no account, no server. Currently at Stage 0 → 1; no code
-exists yet and no technology has been chosen.
+UCI-compatible engines. Local-first, no account, no server. Still no code; the stack is now
+chosen.
 
 ## Current stage
 
-Stage 0 — Idea validation: **complete**. Gate passed — the idea fits on one page
-(`docs/product-vision.md`). Ready for Stage 1 (Product definition) via
-`ai/prompts/kick-off.md`.
+Stage 1 — Product definition, in progress. Stage 0 complete. Three hard-stop gates closed this
+session (ADR-0001, ADR-0002, ADR-0003); one remains open (B-004).
 
 ## Active work
 
-- Nothing in progress. Next session starts Stage 1.
+- Nothing in progress. Next session runs the B-048 spike.
 
 ## Decided
 
-- **Scale target.** MVP designs for a **personal database of ~10,000 games** — read/write,
-  header search, no position index. A **reference database** of millions of master games
-  (read-mostly, bulk-loaded, position-indexed, for opening search and W/D/L statistics) is
-  **post-MVP** but must not be designed out. Working assumption: two stores of different
-  shapes, not one store stretched to cover both. See `docs/product-vision.md` §7 and B-040.
-- **Repository hosting: GitHub.** Project created. This is a hosting decision, but a cheap one
-  to reverse (a git remote), so it is recorded here rather than gated. Distribution channel
-  for built releases is a *separate*, later decision (B-047 / B-032) and should not be assumed
-  to follow from this.
-- **Commit identity: set per-repo, pseudonymous, GitHub no-reply address.** Verified present
-  on the initial commit as both author and committer. The address is deliberately *not*
-  written into any tracked file — it lives in `.git/config` only. Do not add it to
-  documentation, and do not set it globally.
+Earlier sessions:
+
+- **Scale target.** MVP designs for a personal database of ~10,000 games. A reference database
+  of millions of master games is post-MVP but must not be designed out. See
+  `docs/product-vision.md` §7 and B-040.
+- **Repository hosting: GitHub.** Cheap to reverse; distribution channel is a separate, later
+  decision (B-047 / B-032).
+- **Commit identity: per-repo, pseudonymous, GitHub no-reply address.** Lives in `.git/config`
+  only — deliberately not written into any tracked file.
+
+This session (all recorded as ADRs):
+
+- **ADR-0001 — UI framework: Tauri 2** with a TypeScript frontend. Chosen because it is the only
+  candidate with a best-in-class off-the-shelf answer to both hard problems: `chessground` for
+  the board, `shakmaty` + `pgn-reader` for bulk parsing and position hashing. Owner has prior
+  production Tauri experience, which lowers the two-language risk.
+- **ADR-0002 — Licence: GPL-3.0-or-later.** Forced by the chess stack and aligned with the
+  stated intent to open-source. Decided now because it was free today and becomes effectively
+  irreversible once contributors hold copyright.
+- **ADR-0003 — Chess libraries: buy jobs 1–2, build job 3.** Rust `pgn-reader` + `shakmaty` own
+  import; TypeScript `chessops` owns the open game; `chessground` renders the board; no
+  third-party Rust game tree (`sacrifice` / `rpgn` declined).
+
+**Working assumption for B-004, agreed but not yet gated:** one `games` table with hot header
+fields extracted into indexed columns *and* the original PGN text stored verbatim in the same
+row. Makes "zero data loss, round-trips cleanly" true by construction rather than by effort.
+Schema details raised: B-058 (player table + name normalisation), B-059 (partial dates),
+B-060 (full tag set as JSON, `Result` as integer), B-061/B-062 (compression, FTS5 — post-MVP).
+
+No notify-and-proceed choices made this session.
+
+## Standing constraints
+
+- **Keep the frontend Electron-portable.** All shell/IPC calls go through a single frontend
+  adapter module. This is what keeps ADR-0001 reversible if WebKitGTK proves unworkable on
+  Linux; it stops being true the moment Tauri APIs are sprinkled through components.
+- **Everything links GPL-3.0-or-later.** No closed-source path exists any more. Check the
+  licence of any new dependency before adding it.
 
 ## Recently completed
 
-- **Repository initialised, committed, and pushed to GitHub** (`main`, commit `99a6079`,
-  tracking `origin/main`) with a pseudonymous per-repo identity. 15 files tracked;
-  `.DS_Store` correctly excluded by `.gitignore`.
-- `docs/product-vision.md` written and approved: problem, users, value proposition, MVP,
-  success criteria, non-goals, open questions.
-- `docs/backlog.md` seeded with 39 items (B-001 – B-039), including future features and
-  explicitly rejected ideas.
-- `README.md` replaced — was still the starter kit's README, now describes this project.
+- Stage 1 kick-off review: read `AGENTS.md`, `ai/methodology.md`, `README.md`, vision, backlog,
+  handover. Summarised state, risks, quick wins, and gates.
+- **B-003, B-005, B-052 closed** — ADR-0001, ADR-0003, ADR-0002 written.
+- Backlog grown from 39 to 55 items (B-048 – B-064 added across two passes); B-002 corrected to
+  `done`.
 
 ## Open decisions
 
-Four **hard-stop** Decision Gates, all open, all blocking implementation. Use
-`ai/prompts/decision.md` (six-part format) and record each as an ADR once approved:
-
-- **B-003 — UI framework / desktop shell.** Largest and least reversible. No stated leaning;
-  fully open.
-- **B-004 — Local storage / database engine.** Scale target now settled (see *Decided*), so
-  this gate is judged on two criteria: comfortably meets the 10k-game MVP, *and* leaves room
-  for a separate read-mostly reference database later.
-- **B-005 — Chess rules & PGN handling: library vs. own implementation.** Follows B-003, since
-  available libraries depend on the language.
+- **B-004 — Local storage / database engine.** The one remaining hard stop. Now much more
+  constrained: Rust backend, 10k-game MVP, must leave room for a separate read-mostly
+  position-indexed reference database. SQLite is the obvious candidate; the gate still needs
+  running properly, including the schema questions in B-058 – B-062.
 - **B-006 — Engine process management & UCI transport.** Escalates to a platform-surface
-  commitment if an engine binary is bundled (signing, notarisation, sandboxing).
-
-No notify-and-proceed choices made this session — nothing technical has been decided.
+  commitment only if an engine binary is bundled. Not triggered by M1.
+- **B-051 — Bundle an engine or require user-supplied.** Unblocked on licensing grounds now
+  (Stockfish is GPL-3.0, same family), so this reduces to binary size, signing, and per-platform
+  builds.
+- **B-031 — Public-repo timing.** Licence is settled; *when* the repo goes public is not.
 
 ## Risks
 
-1. **Framework choice dominates everything.** Language, libraries, storage options, packaging,
-   and the performance ceiling are all downstream. Resolve first; do not let code accumulate
-   before it is settled.
-2. **UI performance under engine load is unproven.** Rendering an interactive board smoothly
-   while an engine floods stdout is the concrete thing to spike before committing to B-003.
-3. **"Modern" is currently an adjective, not a spec.** The vision's central claim rests on
-   design quality; without a deliberate design system (B-024) this becomes the first thing to
-   quietly slip.
-4. **The reference database is a second product hiding inside the first.** Millions of games,
-   a position index, aggregate statistics, and a redistributable data source (B-043) — the
-   licensing and download size are likely harder than the code. Keep it firmly post-MVP, but
-   let it veto storage choices that would make it impossible.
-5. **Cross-platform is claimed from day one** but only gets verified if all three OSes are
-   built and run early. "Linux later" is how it stops being true.
-6. **Packaging and distribution are routinely underestimated** — installers, code signing,
-   macOS notarisation, auto-update (B-032).
+1. **WebKitGTK on Linux is now the top technical risk.** The framework is chosen, so the open
+   question is narrower and sharper: does chessground stay smooth in WebKitGTK while a UCI
+   engine floods stdout? B-048 exists to answer exactly this. Tauri is reportedly moving toward
+   a Chromium-based Linux webview — treat as upside, not as a plan.
+2. **"Modern" is still an adjective, not a spec.** B-024 sits at P2, which schedules the vision's
+   central claim last. The web frontend makes it cheaper to deliver; it does not make it happen.
+3. **Bus factor of one across the entire chess stack.** Niklas Fiekas maintains shakmaty,
+   pgn-reader, chessops, chessground, and fishnet. Mitigated by all of it being GPL, open, and
+   small — forkable if needed — but worth knowing rather than discovering.
+4. **Two chess rule implementations must agree** (shakmaty and chessops). Accepted cost of the
+   ADR-0003 split; tracked as B-064.
+5. **Vision quality has become a trap.** Twelve documents and no executable. The methodology's
+   "momentum over perfection" exists for exactly this failure mode — the next session should
+   produce something that runs.
+6. **The reference database is a second product hiding inside the first.** Licensing and download
+   size (B-043) are likely harder than the code. Keep it post-MVP; let it veto storage choices
+   that would make it impossible.
+7. **Cross-platform is claimed from day one** but only stays true if all three OSes build early
+   (B-046).
+8. **Packaging and distribution are routinely underestimated** (B-032).
 
 ## Next actions
 
-1. Run `ai/prompts/kick-off.md` for Stage 1: MVP scope, core workflows, feature list.
-2. Then open the B-003 framework gate — with a spike on board rendering under engine I/O
-   before committing to anything.
+1. **B-057** — add `COPYING` (full GPL-3.0 text) and SPDX identifiers, *before* the first
+   dependency lands.
+2. **B-048** — the spike: chessground rendering and drag-interaction inside WebKitGTK on Linux
+   while a Stockfish subprocess floods stdout over Tauri IPC. Timeboxed to a day, thrown away
+   afterwards. This is the one result that could invalidate ADR-0001.
+3. **B-004** — run the storage gate once the spike is in.
+4. Then **B-054** (M1 Skeleton) and **B-055** (`tech-stack.md`, `architecture.md`).
+
+`B-053` (core workflows doc) is the remaining Stage 1 deliverable but is not on the critical
+path.
 
 ## Notes for the next session
 
-- **Repo is public-facing on GitHub from commit one.** Anything committed from here on is
-  permanently visible. The pre-commit habit that matters: check `git status` before staging,
-  never `git add -A` blind once source and local databases exist.
-- **AI assistants working in a sandboxed environment may not be able to delete files** in this
-  folder, which can leave a stale `.git/index.lock` that blocks all git commands. Fix is
-  `rm -f .git/index.lock` from a normal terminal; no repository data is at risk. Prefer
-  running commits from a real terminal.
-- **Identity hygiene is a standing rule, not a one-off.** It is set per-repo, so it does not
-  survive a fresh clone made with a global identity. Re-verify with
-  `git log --format='%an <%ae>'` before any push to a public remote — git records author and
-  email on every commit independently of file contents, so clean files plus a real-name
-  history is not clean.
-- **Keep this repository free of personal information.** No real names, usernames, email
-  addresses, or absolute filesystem paths containing a home directory — in code, docs, config,
-  comments, or commit messages. The placeholder in `ai/prompts/session-start.md` is left
-  unfilled on purpose for this reason; supply the project path in the chat session instead of
-  committing it.
-- `.DS_Store` files exist in the working tree; `.gitignore` covers them, but confirm they are
-  not staged if git history is ever initialised from a copy.
-- The methodology treats Stage 0 as optional; it was run deliberately here because the product
-  is intended for public release, not just personal use.
+- **Repo is public-facing on GitHub from commit one.** Check `git status` before staging; never
+  `git add -A` blind once source and local databases exist.
+- **AI assistants in a sandboxed environment may not be able to delete files** here, which can
+  leave a stale `.git/index.lock` blocking all git commands. Fix is `rm -f .git/index.lock` from
+  a normal terminal. Prefer running commits from a real terminal.
+- **Identity hygiene is a standing rule.** Set per-repo, so it does not survive a fresh clone
+  made with a global identity. Re-verify with `git log --format='%an <%ae>'` before any push.
+- **Keep this repository free of personal information** — no real names, usernames, email
+  addresses, or absolute paths containing a home directory. The placeholder in
+  `ai/prompts/session-start.md` is left unfilled on purpose; supply the project path in chat.
+- `.DS_Store` files exist in the working tree and are correctly covered by `.gitignore`.
+- **Nothing has been committed this session.** Three new ADRs, an updated backlog, and this file
+  are uncommitted. Commit before starting new work.

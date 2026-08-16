@@ -17,10 +17,10 @@ Deferred ideas worth keeping but not scheduling can also live in `docs/parking-l
 | ID | Type | Priority | Status | Description | Notes |
 |-------|---------|----------|-------------|-------------|-------|
 | B-001 | chore | P0 | done | Initialize repo with AI-dev starter kit | Methodology, prompts, handover, backlog in place |
-| B-002 | chore | P0 | in-progress | Stage 0 — one-page product vision | Draft complete; pending approval to save `docs/product-vision.md` |
-| B-003 | chore | P0 | proposed | Decision Gate: UI framework / desktop shell | Hard stop. Cross-platform Win/macOS/Linux. Open — see vision "Decision Gates" |
-| B-004 | chore | P0 | proposed | Decision Gate: local storage / database engine | Hard stop. Local-first, embedded. MVP target 10k games; must not design out a separate reference DB (B-040) |
-| B-005 | chore | P1 | proposed | Decision Gate: chess rules/PGN library vs. own implementation | Buy-vs-build; language-dependent, so follows B-003 |
+| B-002 | chore | P0 | done | Stage 0 — one-page product vision | Approved and committed as `docs/product-vision.md`. Gate passed |
+| B-003 | chore | P0 | done | Decision Gate: UI framework / desktop shell | **Tauri 2** + TypeScript frontend. See ADR-0001. Frontend stays Electron-portable via a single IPC adapter module |
+| B-004 | chore | P0 | proposed | Decision Gate: local storage / database engine | Hard stop. Local-first, embedded. MVP target 10k games; must not design out a separate reference DB (B-040). **Working assumption (agreed, to confirm at the gate):** one `games` table with hot header fields extracted into indexed columns *and* the original PGN text stored verbatim in the same row — makes lossless round-trip true by construction. See B-058 – B-062 for the schema details this raises |
+| B-005 | chore | P1 | done | Decision Gate: chess rules/PGN library vs. own implementation | **Buy jobs 1–2, build job 3.** Rust `pgn-reader` + `shakmaty` for import; TS `chessops` for the open game; `chessground` for the board; no third-party Rust game tree. See ADR-0003 |
 | B-006 | chore | P1 | proposed | Decision Gate: engine process management & UCI transport | Hard stop if it becomes a platform-surface commitment (bundled engine, sandboxing, code signing) |
 | B-007 | feature | P0 | proposed | PGN import (file + paste) into local database | MVP core. Must survive messy real-world PGN |
 | B-008 | feature | P0 | proposed | Game list view with sort and column selection | MVP core |
@@ -57,6 +57,23 @@ Deferred ideas worth keeping but not scheduling can also live in `docs/parking-l
 | B-045 | chore | P2 | proposed | GitHub repo hygiene: branch protection, issue/PR templates, CODEOWNERS, Dependabot | Do when the repo goes public, not before |
 | B-046 | chore | P2 | proposed | CI on GitHub Actions: build + test matrix across Windows, macOS, Linux | The only thing that keeps "cross-platform" honest. Follows B-003 |
 | B-047 | chore | P3 | proposed | Distribute releases via GitHub Releases (installers per platform) | Distribution channel decision is separate from repo hosting; revisit at B-032 |
+| B-048 | chore | P0 | proposed | Spike: board render + move interaction while a UCI engine floods stdout | Timeboxed, throwaway. Validates the B-003 shortlist before committing. Risk 2 in handover exists precisely because this is unproven |
+| B-049 | chore | P1 | proposed | Decide PGN import fidelity policy: accept / repair / reject malformed input | Vision open question 2. Notify-and-proceed, but must be written down before B-007 is built |
+| B-050 | chore | P1 | proposed | Decide whether MVP is read-only or writes annotations | Vision open question 1. Shapes the storage schema, so answer before B-004 is finalised. Read-only-first is simpler; a library you can't write into may not displace anything |
+| B-051 | chore | P1 | proposed | Decide whether to bundle an engine (e.g. Stockfish) or require user-supplied | Vision open question 3. Distinct from B-006: that is transport, this is licensing, binary size, signing, per-platform builds |
+| B-052 | chore | P2 | done | Decide open-source timing and licence | **GPL-3.0-or-later.** Forced by the chess stack (shakmaty/pgn-reader/chessops/chessground all GPL-3.0+), and aligned with stated intent. See ADR-0002. Public-repo *timing* still open — tracked under B-031 |
+| B-057 | chore | P0 | proposed | Add `COPYING` (full GPL-3.0 text) + SPDX identifiers in `Cargo.toml` / `package.json` | Must land before the first GPL dependency is added, so the licence is on record from the commit that creates the obligation |
+| B-058 | tech-debt | P1 | proposed | Player identity: separate `players` table with FK, plus name normalisation | Case, accents, `Lastname, Firstname` vs `Firstname Lastname`. Needed for "my Sicilians as Black" (B-010) and for dedupe/merge (B-022). More work up front, much less pain later |
+| B-059 | tech-debt | P1 | proposed | Partial-date handling: store raw PGN date string *and* a nullable parsed date | Real PGN routinely carries `2024.??.??` or `????.??.??`. Sorting/filtering needs the parsed value; fidelity needs the original |
+| B-060 | tech-debt | P1 | proposed | Store the full PGN tag set as JSON alongside extracted columns | Real files carry `Annotator`, `PlyCount`, `Variant`, `FEN`, `SetUp`, `WhiteTitle`, and site-specific tags. Extract the hot ones; keep everything so nothing is silently dropped. Store `Result` as an integer, not `"1-0"` |
+| B-061 | idea | P3 | proposed | zstd-compress stored PGN text | Raw PGN compresses extremely well. Post-MVP; noted so it isn't rediscovered |
+| B-062 | idea | P3 | proposed | SQLite FTS5 over player and event names for fuzzy search | Cheap once the store is chosen. Post-MVP |
+| B-063 | tech-debt | P2 | proposed | Annual dependency upgrade chore: `pgn-reader` / `shakmaty` 0.x breaking releases | pgn-reader's author describes maintenance as minimal, following shakmaty. Pin versions; expect one upgrade pass per year |
+| B-064 | tech-debt | P2 | proposed | Keep the two chess rule implementations consistent (shakmaty vs. chessops) | Accepted cost of the ADR-0003 split. They never arbitrate the same question — Rust at import, TS at interaction — but divergence would be confusing. Consider a shared test corpus |
+| B-053 | chore | P0 | proposed | Stage 1 deliverable: core workflows document | The one Stage 1 deliverable the vision does not already cover. 4–6 end-to-end user journeys (import → find → open → play through). Feeds the skeleton's screen list |
+| B-054 | chore | P0 | proposed | Milestone M1 — Skeleton: window, static board from FEN, mock game list, navigation | Stage 3. First visible progress. Blocked by B-003. Write `docs/milestones/m1-skeleton.md` |
+| B-055 | chore | P1 | proposed | Create `docs/tech-stack.md` and `docs/architecture.md` | Stage 2. Written immediately after B-003/B-004 land, not before — they have nothing to say until then |
+| B-056 | idea | P3 | proposed | Position setup by FEN paste as a cheap early board test | Falls out of B-016; useful as a skeleton-stage smoke test before any database exists |
 
 ## Rejected / deferred (kept on purpose)
 

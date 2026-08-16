@@ -70,16 +70,31 @@ Decisions that are expensive to reverse — framework, storage, platform commitm
 **hard stops**: they are written up with options and tradeoffs, approved explicitly, and
 recorded as an ADR before any code depends on them.
 
+## Decisions made
+
+Recorded as ADRs in [`docs/adr/`](docs/adr/):
+
+| Decision | Choice | ADR |
+|---|---|---|
+| UI framework / desktop shell | Tauri 2 with a TypeScript frontend | [ADR-0001](docs/adr/0001-ui-framework-tauri.md) |
+| Licence | GPL-3.0-or-later | [ADR-0002](docs/adr/0002-licence-gpl3.md) |
+| Chess rules, PGN handling, board | `shakmaty` + `pgn-reader` (Rust, import) · `chessops` (TS, open game) · `chessground` (board) | [ADR-0003](docs/adr/0003-chess-libraries.md) |
+
 ## Decisions pending
 
-Four hard-stop gates block implementation. See `docs/backlog.md` (B-003 – B-006):
+Two gates remain. See `docs/backlog.md`:
 
-- UI framework / desktop shell
-- Local storage / database engine
-- Chess rules & PGN handling — library vs. own implementation
-- Engine process management and UCI transport
+- **B-004** — local storage / database engine (hard stop)
+- **B-006** — engine process management and UCI transport
+- **B-051** — bundle an engine, or require the user to supply one
+
+## Licence
+
+GPL-3.0-or-later. The chess libraries this project builds on — `shakmaty`, `pgn-reader`,
+`chessops`, and `chessground` — are all GPL-3.0-or-later, as is Stockfish. See
+[ADR-0002](docs/adr/0002-licence-gpl3.md) for the reasoning.
 
 ## Contributing
 
 Not open to contributions yet. The intent is to open-source this for the chess community once
-it is genuinely usable; licence and contribution guidelines will land then.
+it is genuinely usable; contribution guidelines will land then.
