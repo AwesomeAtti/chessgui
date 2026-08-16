@@ -4,24 +4,24 @@
 > (human or AI) can resume with zero chat history.
 
 **Last updated:** 2026-08-16 · **Updated by:** AI (Stage 1 / session 2) · **Kit version:** 0.2.0
-· **Head at session end:** `c84ade7` + uncommitted scope decisions
+· **Head at session end:** `c84ade7`, plus uncommitted scope decisions and the B-048 write-up
 
 ## Project summary
 
 `chessgui` — a modern, cross-platform (Windows / macOS / Linux) desktop chess database and
 chess GUI: import, search, organize, annotate, and analyze your own games locally, using
-UCI-compatible engines. Local-first, no account, no server. Still no code; the stack is now
-chosen.
+UCI-compatible engines. Local-first, no account, no server. No product code yet; the stack is
+chosen and now measured — a throwaway spike proved it works and was deleted.
 
 ## Current stage
 
-Stage 1 — Product definition, in progress. Stage 0 complete. Three hard-stop gates closed this
-session (ADR-0001, ADR-0002, ADR-0003); one remains open (B-004).
+Stage 1 — Product definition, nearly complete; first Stage 2 document exists
+(`docs/tech-stack.md`). Three hard-stop gates closed (ADR-0001, ADR-0002, ADR-0003); one remains
+open (B-004). **B-048 passed — something ran, and ADR-0001 survived contact with a measurement.**
 
 ## Active work
 
-- Nothing in progress. B-048 spike is next; Rust, Node, and a local Stockfish binary are
-  confirmed available on the dev machine.
+- Nothing in progress. B-048 is run and written up; B-004 (storage gate) is the next hard stop.
 
 ## Decided
 
@@ -107,6 +107,16 @@ Session 2:
 
 - **B-050 closed** — MVP scope set to read-only; vision §4, §7, §8 and success criteria amended.
 - **B-072 – B-075 added** — multi-language requirement captured; vision §3 and §5 amended.
+- **B-048 run and passed.** Tauri 2 + chessground + chessops + Stockfish spike built outside the
+  repo, run on macOS, discarded afterwards. Frame time median and p95 both **17.0 ms (vsync)**,
+  *identical* with the engine stopped and running; worst frame was actually lower under load
+  (18 ms vs 22 ms). Pointer-down latency 1–5 ms. Emitter held **10.0 events/sec with zero
+  drops**. Full write-up in `docs/tech-stack.md`.
+- **`docs/tech-stack.md` created** — first Stage 2 deliverable, half of B-055. It carries the
+  B-048 findings and the B-067 throttling rule. `docs/architecture.md` still outstanding.
+- **B-076, B-077 added** from what the spike exposed.
+
+Session 1:
 
 - Stage 1 kick-off review: read `AGENTS.md`, `ai/methodology.md`, `README.md`, vision, backlog,
   handover. Summarised state, risks, quick wins, and gates.
@@ -138,13 +148,13 @@ Session 2:
 
 ## Risks
 
-1. **WebKitGTK on Linux remains unverified, and B-048 will not close it.** The spike runs on
-   macOS (WKWebView), so it validates the throttling architecture and the chessground/Stockfish
-   plumbing but not WebKitGTK's frame pacing. Closing this is **B-066**, blocked on B-070
-   (testers). Note the reframe in the spike spec: the dominant risk is flooding the IPC boundary
-   with per-line engine events, which would melt any webview including Chromium — throttling in
-   Rust (B-067) addresses it, and that is webview-independent. Tauri is reportedly moving toward
-   a Chromium-based Linux webview — treat as upside, not as a plan.
+1. **WebKitGTK on Linux remains unverified.** As predicted, B-048 did not close it — the spike
+   ran on macOS/WKWebView, so it validated the throttling architecture and the
+   chessground/Stockfish plumbing but not WebKitGTK's frame pacing. Closing this is **B-066**,
+   blocked on B-070 (testers). Two updates from the run: the macOS result was comfortably clean
+   rather than marginal, which is weak positive evidence for the WebKit family; and the IPC
+   flood that framed this risk **turned out to be much smaller than assumed** (see risk 9).
+   Tauri is reportedly moving toward a Chromium-based Linux webview — treat as upside, not plan.
 2. **"Modern" is still an adjective, not a spec.** B-024 sits at P2, which schedules the vision's
    central claim last. The web frontend makes it cheaper to deliver; it does not make it happen.
 3. **Bus factor of one across the entire chess stack.** Niklas Fiekas maintains shakmaty,
@@ -152,9 +162,10 @@ Session 2:
    small — forkable if needed — but worth knowing rather than discovering.
 4. **Two chess rule implementations must agree** (shakmaty and chessops). Accepted cost of the
    ADR-0003 split; tracked as B-064.
-5. **Vision quality has become a trap.** Twelve documents and no executable. The methodology's
-   "momentum over perfection" exists for exactly this failure mode — the next session should
-   produce something that runs.
+5. **Vision quality was becoming a trap; the spike broke the pattern but did not cure it.**
+   Something finally ran. The count is now thirteen documents and one *discarded* executable —
+   the project still has no product code. Momentum over perfection still applies: B-054 (M1
+   skeleton) is what turns this into a standing risk again if it slips.
 6. **The reference database is a second product hiding inside the first.** Licensing and download
    size (B-043) are likely harder than the code. Keep it post-MVP; let it veto storage choices
    that would make it impossible.
@@ -165,28 +176,36 @@ Session 2:
    the first commit (B-046), headless smoke tests (B-071), portability guardrails (B-069), and
    starting on testers well before the builds are ready for them.
 8. **Packaging and distribution are routinely underestimated** (B-032).
+9. **A risk we sized wrong, and the way we sized it wrong is the lesson.** The IPC flood was the
+   headline risk in ADR-0001 and the spike spec. Measured, it barely exists: Stockfish emits
+   0–1 lines/sec at depth, peaking around 44/sec with MultiPV 8 during the shallow phase. The
+   feared 100×+ ratio never appeared. Two consequences. First, **the realistic pattern was never
+   tested** — a real GUI restarts the search on every move, so a user clicking through a game
+   replays the burst phase continuously, which is B-076 and is the normal case. Second, and more
+   general: this project's risk register is built from reasoning rather than measurement, and
+   the one item that got measured turned out to be misjudged. Worth remembering before treating
+   any other entry on this list as sized.
+10. **A benchmark nearly produced a false negative against ADR-0001.** macOS Low Power Mode
+    capped the machine to 30 fps on mains power, and the first spike run looked like a failure.
+    A plain-browser control on the same machine is what caught it (B-077). Any future
+    performance claim needs a control and a recorded power state.
 
 ## Next actions
 
-1. **B-048 — run the spike.** Spec and pass/fail thresholds are already written; read
-   `docs/feature-specs/b048-webview-engine-spike.md` and build to it. Needs a locally supplied
-   Stockfish binary (bundling is B-051, undecided), plus Rust and Node toolchains. **Build it
-   outside this repo**, in a throwaway directory — only the findings and the throttling design
-   come back, into `docs/tech-stack.md`.
-2. **B-004** — run the storage gate once the spike is in. Include the schema questions
-   (B-058 – B-062).
-3. **B-054** (M1 Skeleton) and **B-055** (`tech-stack.md`, `architecture.md`). The skeleton is
-   where B-072 (message catalogue) and B-069 (portability guardrails) either get established or
-   get lost — both are structural, and both are cheap only if they are there from the first
-   screen. B-065 (SPDX) also unblocks here.
-4. **B-046** — three-OS CI. Cheap, and it is what makes the amended cross-platform criterion
+1. **B-004 — run the storage gate.** The one remaining hard stop, and nothing is blocking it now.
+   Include the schema questions (B-058 – B-062) and the read-only simplification from B-050.
+2. **B-054** (M1 Skeleton) and the rest of **B-055** (`architecture.md`; `tech-stack.md` now
+   exists). The skeleton is where B-072 (message catalogue) and B-069 (portability guardrails)
+   either get established or get lost — both are structural, and both are cheap only if they are
+   there from the first screen. B-065 (SPDX) also unblocks here.
+3. **B-046** — three-OS CI. Cheap, and it is what makes the amended cross-platform criterion
    true rather than aspirational.
 
 `B-053` (core workflows doc) is the remaining Stage 1 deliverable but is not on the critical
 path. `B-065` (SPDX identifiers) unblocks once manifests exist at B-054.
 
-**This project has produced twelve documents and zero executables.** The next session should
-end with something that runs. That is the point of B-048 being first.
+**The spike ran, passed, and was thrown away — as designed.** The next thing that runs should be
+something that survives: B-054, the M1 skeleton.
 
 ## Notes for the next session
 
@@ -201,9 +220,17 @@ end with something that runs. That is the point of B-048 being first.
   addresses, or absolute paths containing a home directory. The placeholder in
   `ai/prompts/session-start.md` is left unfilled on purpose; supply the project path in chat.
 - `.DS_Store` files exist in the working tree and are correctly covered by `.gitignore`.
-- **Session committed in four increments:** `9260026` (ADRs), `6cc166f` (licence), `4f67976`
-  (spike spec + platform dependency), `d86bc66` (vision amendment). Only this handover update
-  remains uncommitted.
+- **Session 1 committed in four increments:** `9260026` (ADRs), `6cc166f` (licence), `4f67976`
+  (spike spec + platform dependency), `d86bc66` (vision amendment), plus `c84ade7` (handover).
+- **Session 2 is uncommitted at time of writing:** vision amendments, backlog B-050/B-072–B-077,
+  `docs/tech-stack.md`, and this handover.
+- **The B-048 spike was built and run outside this repo and is not tracked here.** Nothing from
+  it should be committed. If a `spike/` directory turns up inside the repo, it is a mistake.
+- **Practical note on running spikes:** the AI environment is a Linux sandbox with no Rust
+  toolchain, so anything requiring `cargo` or a macOS window has to be run by hand in a real
+  terminal. Expect that split on any future spike. Two things bit us and will bite again —
+  Tauri needs `src-tauri/icons/icon.png` to exist or the build fails in a proc macro, and
+  macOS Low Power Mode silently invalidates performance measurements.
 - **Start the next session with `ai/prompts/session-start.md`.** This file plus `docs/backlog.md`
   should be sufficient — if the next session has to ask something that was settled here, this
   handover failed and is worth fixing rather than working around.
