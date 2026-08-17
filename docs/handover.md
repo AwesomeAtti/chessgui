@@ -388,6 +388,13 @@ Session 4:
   Raised **B-103** (the result vocabulary is per-player and richer than `1-0`, but the sample has no
   draws, so the draw strings are unobserved — do not guess them) and **B-104** (whether to store
   `accuracies` at all, given it is another engine's derived output that we cannot reproduce).
+  **A postscript that is really the session's whole lesson in miniature.** Asked whether JSON `eco`
+  maps safely to `ECOUrl`, the measured answer was yes — 21/21 byte-identical, zero mismatches — but
+  `eco` is *absent* on 4 of 25 games whose PGN still has `ECOUrl`. All four were unrated daily games,
+  which I was one sentence away from recording as the rule. **Testing it showed 13 other unrated
+  daily games do have `eco`, so the pattern was noise.** Fifth plausible story corrected by
+  measurement in a single session, and the only one where the check took longer to run than the
+  wrong explanation would have taken to write.
 - **`scripts/survey-pgn.mjs` written and tested — the instrument for B-101.** Dependency-free
   Node; `npm run survey:pgn -- <path>`, with `--redact` for output destined for the repo.
   Verified against synthetic fixtures covering every metric and both collision paths, **with a
