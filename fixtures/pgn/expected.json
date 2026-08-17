@@ -1,178 +1,183 @@
 {
   "$comment": [
-    "One entry per fixture, in ADR-0008's vocabulary. Read by both the TypeScript and Rust test",
-    "suites — see ../README.md.",
-    "TWO KINDS OF FIELD, and confusing them would make this corpus look verified when it is not.",
-    "SPECIFICATION (not asserted by anything yet): `disposition` and `warnings` are what ADR-0008",
-    "requires of the importer. B-007 will assert them; today nothing does, because there is no",
-    "importer. Warning codes are provisional until B-007 settles the vocabulary.",
-    "OBSERVED (asserted by mainline.test.ts today): `plies` and `truncatedAtPly` are what the",
-    "frontend reader actually does, measured rather than predicted. `plies` matters independently",
-    "of `truncatedAtPly` because the interesting failures are the ones that lose moves while",
-    "reporting success."
+    "One entry per fixture. Read by both the TypeScript and Rust test suites — see ../README.md.",
+    "GOVERNED BY ADR-0009 (strict import), which superseded ADR-0008's permissive tiers.",
+    "`outcome` IS DECIDED ENTIRELY BY THE LIBRARIES. A game errors when pgn-reader / shakmaty /",
+    "chessops refuse it, and otherwise it imports. We add no validation of our own — not a spec",
+    "checker, not a zero-moves guard, nothing. Fourteen of eighteen fixtures therefore IMPORT, several",
+    "of them despite not conforming to the PGN specification: duplicate tags, a Result disagreeing",
+    "with the termination marker, missing roster tags, an unterminated comment that eats four plies,",
+    "and bytes that are not PGN at all. Those are ADR-0009's ACCEPTED RISKS, listed in the ADR, and",
+    "each note says so. `errorCode` has only two values because that is all the libraries distinguish:",
+    "a move token they will not play, and a starting position they will not build.",
+    "TWO KINDS OF FIELD, and conflating them would make this corpus look verified when it is not.",
+    "SPECIFICATION, asserted by nothing yet: `outcome` and `errorCode` are what ADR-0009 requires of",
+    "the importer. B-007 asserts them; there is no importer today.",
+    "OBSERVED, asserted by mainline.test.ts today: `plies` and `truncatedAtPly` are measured from the",
+    "frontend reader. They describe DISPLAY behaviour and are unaffected by import policy."
   ],
   "fixtures": [
     {
       "file": "clean-standard.pgn",
       "rule": "1",
-      "disposition": "clean",
-      "warnings": [],
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 7,
       "truncatedAtPly": null,
-      "note": "The negative control. A harness that flags everything cannot pass this, which is the point of keeping it."
+      "note": "The negative control: conforms in every respect. A corpus that only held rejections would be passed by an importer that refuses everything."
     },
     {
       "file": "illegal-move-midgame.pgn",
       "rule": "3",
-      "disposition": "imported",
-      "warnings": ["illegal_move"],
+      "outcome": "error",
+      "errorCode": "invalid_move",
       "plies": 6,
       "truncatedAtPly": 6,
-      "note": "4. Qg7 is well-formed SAN and illegal in the position reached. Two further legal-looking moves follow it deliberately, so a reader that skipped rather than stopped would produce a longer mainline and fail."
+      "note": "ERRORS because the LIBRARY refuses the token — 4. Qg7 is well-formed SAN and illegal in the position reached, so parseSan returns nothing. That is the parser's decision, not a check of ours, and it is why this is one of only four errors in eighteen fixtures. The error detail must carry ply 6 and the token. Two further legal-looking moves follow deliberately: a parser that skipped rather than stopped would report the wrong ply."
     },
     {
       "file": "unterminated-comment.pgn",
-      "rule": "1",
-      "disposition": "imported",
-      "warnings": ["unterminated_comment"],
+      "rule": "3",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 3,
       "truncatedAtPly": null,
-      "note": "MEASURED, AND THE NUMBER TO LOOK AT IS `plies`. An unclosed `{` swallows the rest of the game — moves 3 and 4 and the result token — and the reader reports complete success: truncatedAtPly is null. Four plies vanish with nothing to indicate it. This is why `plies` is asserted separately: our `Mainline` type can say 'stopped at ply n' but has no way to say 'read to the end of what was left, and what was left was wrong'."
+      "note": "IMPORTS, and this is the most uncomfortable entry in the corpus — an ACCEPTED RISK in ADR-0009, not an oversight. MEASURED: the unclosed `{` swallows moves 3 and 4 and the termination marker, and the parse reports complete SUCCESS with truncatedAtPly null. Four plies vanish with no signal whatsoever. Detecting it would mean doing our own brace matching, which is the validator ADR-0009 declines to write. Accepted because the file stays on disk and a wrong row costs a re-import (B-078)."
     },
     {
       "file": "unterminated-tag-quote.pgn",
-      "rule": "1",
-      "disposition": "imported",
-      "warnings": ["unterminated_tag_quote"],
+      "rule": "3",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 0,
       "truncatedAtPly": null,
-      "note": "MEASURED: one damaged game becomes TWO games. The unclosed quote in [Event \"...] runs on until the next quote, which consumes the following tag lines, and the tokenizer then treats the movetext as a separate game with default headers. Consequences for ADR-0008 rule 7 and B-097: the import report's game count can exceed the number of games in the file, so 'imported 4 of 3' is a reachable state. Also relevant to rule 6, since a split game hashes as neither half."
+      "note": "IMPORTS, as two rows rather than one — MEASURED: the unclosed quote in [Event \"...] runs on to the next quote, consuming the following tag lines, and the tokenizer treats the leftover movetext as a SEPARATE game with default headers. The library refuses nothing, so neither do we. Consequence for the error report: a game's index within a file is not a stable identifier, so identifying header text must travel with any error rather than the index alone."
     },
     {
       "file": "missing-roster-tags.pgn",
-      "rule": "1",
-      "disposition": "imported",
-      "warnings": ["missing_roster_tags"],
+      "rule": "3",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 4,
       "truncatedAtPly": null,
-      "note": "MEASURED: chessops FILLS IN the five missing roster tags with defaults — Event becomes \"?\", Result becomes \"*\" — so the header map always holds seven entries and the reader cannot distinguish a missing tag from a tag whose value is literally \"?\". A real value: the importer must decide disposition from the bytes, not from the parser's header map."
+      "note": "IMPORTS with `?` values — an ACCEPTED RISK. MEASURED: chessops FILLS IN the five absent roster tags with defaults, Event becoming \"?\" and Result \"*\", so the header map always holds seven entries and a missing tag is indistinguishable from a tag whose value is literally \"?\". Telling them apart needs the bytes, which is a check we are not writing."
     },
     {
       "file": "duplicated-tags.pgn",
-      "rule": "1",
-      "disposition": "imported",
-      "warnings": ["duplicate_tag"],
+      "rule": "3",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 7,
       "truncatedAtPly": null,
-      "note": "Result appears twice (1-0 then 0-1) and Date twice. MEASURED: chessops keeps the FIRST occurrence. Nothing says pgn-reader must agree, and if it keeps the last, the same file yields a different result in Rust and TypeScript from a file neither considers broken — B-064 divergence with no illegal move anywhere in sight. Worth asserting on both sides for exactly that reason."
+      "note": "IMPORTS keeping the FIRST occurrence — an ACCEPTED RISK. Result appears twice (1-0 then 0-1) and Date twice; the specification requires tag names to be unique, and the library does not enforce it. MEASURED for chessops; **whether pgn-reader resolves the same way is unmeasured, and a difference would be a genuine B-064 divergence on a file neither library considers broken.** Document it, do not police it."
     },
     {
       "file": "result-contradicts-final-token.pgn",
-      "rule": "2",
-      "disposition": "imported",
-      "warnings": ["result_disagrees_with_final_token"],
+      "rule": "3",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 7,
       "truncatedAtPly": null,
-      "note": "MEASURED, and it is not what the file says: the tag reads [Result \"1-0\"], the movetext ends 0-1, and chessops reports Result as 0-1. The game-termination token overwrites the header. So 'derive the hot fields from the tags' is not sufficient on its own — the token can silently win, and ADR-0005's derived `result` column depends on which source we mean. Rule 2 says repair is to derived values only, and this is a case where a repair happens whether we ask for one or not."
+      "note": "IMPORTS — an ACCEPTED RISK, and a reminder that 'derive hot fields from the tags' is not the whole story. The tag reads [Result \"1-0\"] and the movetext ends 0-1; MEASURED, chessops reports 0-1, so the termination marker silently overwrites the header. The derived `result` column can therefore disagree with the file's own tag, which ADR-0005 makes a re-import to fix rather than data loss."
     },
     {
       "file": "headers-without-moves.pgn",
-      "rule": "1",
-      "disposition": "imported",
-      "warnings": ["no_movetext"],
+      "rule": "3",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 0,
       "truncatedAtPly": null,
-      "note": "A complete roster and no moves. NOT quarantined: ADR-0008 reserves that for bytes with no movetext AND no recognisable tag pair, and this has seven of them. A real crosstab row rather than an error — a scheduled-but-unplayed game looks exactly like this."
+      "note": "IMPORTS as a row with no moves. A complete roster and no movetext, which the library accepts without complaint — so we accept it too. Refusing it would need a zero-moves rule of ours, and an earlier draft of ADR-0009 had exactly that before the owner pointed out it is still our validation wearing a smaller hat. It is also not obviously wrong: a scheduled-but-unplayed game legitimately looks like this."
     },
     {
       "file": "not-pgn-bytes.pgn",
-      "rule": "1",
-      "disposition": "quarantined",
-      "warnings": ["not_pgn"],
+      "rule": "3",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 0,
       "truncatedAtPly": null,
-      "note": "A PNG signature plus random bytes, named .pgn. MEASURED: this does not throw and does not produce zero games — it produces ONE game with seven default headers and no moves, which is indistinguishable from headers-without-moves.pgn if you only look at the parse result. The two fixtures sit next to each other on purpose: telling them apart requires asking whether any literal tag pair existed in the bytes, which is precisely how ADR-0008 words the quarantine test."
+      "note": "IMPORTS as one junk row, and that is an ACCEPTED RISK rather than a gap. A PNG signature plus random bytes, named .pgn. MEASURED: the library does not throw and does not return zero games — it returns ONE game with seven default headers and no moves. So 'the parser returned a game' is not evidence that a game exists. We accept the junk row because rejecting it means writing our own check; it is visible, empty, and removable, and if it ever becomes annoying the targeted fix is one line plus this fixture (ADR-0009 says so explicitly)."
     },
     {
       "file": "latin1-no-declaration.pgn",
-      "rule": "5",
-      "disposition": "imported",
-      "warnings": ["encoding_fallback_latin1"],
+      "rule": "3",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 4,
       "truncatedAtPly": null,
-      "note": "Player names carrying umlauts and accents, encoded Latin-1, with nothing in the file declaring it. Decoded as UTF-8 the names come back with U+FFFD replacement characters while the MOVES parse perfectly — so the game looks fine and the people in it are quietly corrupted. That is rule 5's whole justification, and it lands downstream in B-058's name normalisation rather than anywhere visible."
+      "note": "IMPORTS, and it is the one deliberate tolerance in ADR-0009 — compliance rather than permissiveness, because the PGN specification names ISO 8859-1 while modern exporters emit UTF-8 and declare nothing. Try UTF-8, fall back to Latin-1, record which was used: two lines, and rejecting this file would mean rejecting a conforming one. Without the fallback the moves parse perfectly and the accented player names come back as U+FFFD, so the game looks fine and the people in it are quietly corrupted (B-058)."
     },
     {
       "file": "german-san.pgn",
-      "rule": "4",
-      "disposition": "imported",
-      "warnings": ["notation_language_not_english"],
+      "rule": "3",
+      "outcome": "error",
+      "errorCode": "invalid_move",
       "plies": 4,
       "truncatedAtPly": 4,
-      "note": "THE MOST IMPORTANT MEASUREMENT IN THIS CORPUS, and it is worse than ADR-0008 rule 4 describes. 2. Sf3 (Springer, knight) does not fail — chessops's PGN TOKENIZER drops the unrecognised piece letter and yields the SAN `f3`, which is a legal pawn move. Same for Sc6 -> c6. So the derived game becomes 1. e4 e5 2. f3 c6, a real game that was never played, with no warning of any kind; only 3. Lb5 finally fails and truncates. Rule 4 argued that legality cannot arbitrate between notation languages because of the R/roi collision. Measured, the situation is worse: the corruption happens at tokenization, BEFORE legality is consulted, and `node.san` no longer contains the file's own text — so a warning cannot be derived by comparing our SAN against the source without re-reading the raw bytes."
+      "note": "ERRORS, but NOT for the reason it looks like, and this fixture is the clearest statement of ADR-0009's accepted risk. MEASURED: 2. Sf3 (Springer, knight) is NOT refused — the tokenizer drops the unrecognised piece letter and yields `f3`, a legal pawn move, and likewise Sc6 -> c6. So plies 3 and 4 import as moves nobody played, and the game only errors when 3. Lb5 finally fails. **We do not detect the rewriting and we are not going to** — that was ADR-0008 rule 4 and B-098, both rejected. A German file that happened to reinterpret cleanly all the way through would import as a wrong game, silently. Accepted because the sources are chess.com and lichess, which emit English SAN. UNMEASURED and B-007 milestone 1: whether pgn-reader alters tokens the same way."
     },
     {
       "file": "french-san.pgn",
-      "rule": "4",
-      "disposition": "imported",
-      "warnings": ["notation_language_not_english"],
+      "rule": "3",
+      "outcome": "error",
+      "errorCode": "invalid_move",
       "plies": 4,
       "truncatedAtPly": 4,
-      "note": "The same failure through a different convention: 2. Cf3 (cavalier) becomes f3, Cc6 becomes c6, and 3. Fb5 truncates. Two fixtures rather than one because rule 4's required implementation is to scan a whole file for letters unique to one convention — S/L/T for German, C/F for French — so the corpus needs an example of each to test the scan rather than a single hardcoded letter."
+      "note": "The same accepted risk through a different convention: 2. Cf3 (cavalier) becomes f3, Cc6 becomes c6, and 3. Fb5 is what finally fails. Two fixtures rather than one because the conventions use different letters, so an importer that special-cased German would pass one and fail the other."
     },
     {
       "file": "ambiguous-rd1.pgn",
-      "rule": "4",
-      "disposition": "imported",
-      "warnings": ["notation_language_ambiguous"],
+      "rule": "3",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 2,
       "truncatedAtPly": null,
-      "note": "The R/roi collision made concrete, and it is silent by construction. White has Ke1 and Ra1, both of which can legally reach d1, so `Rd1` is a legal rook move under the English reading and a legal KING move under the French one. MEASURED: chessops plays the rook (final position has R on d1, K still on e1) with no complaint. Legality genuinely cannot arbitrate here — there is nothing wrong to detect, only two valid readings of the same text, which is why rule 4 decides notation language per file from unambiguous evidence and never per token."
+      "note": "IMPORTS as the rook move — and this fixture shows what strictness bought. White has Ke1 and Ra1, both able to reach d1, so `Rd1` is a legal rook move in English and a legal KING move in French; legality cannot arbitrate. ADR-0008 needed a rule and a heuristic file-wide language scan for this. Under ADR-0009 the question does not arise: the library reads English SAN, plays the rook, and the game imports. B-098 was rejected on the strength of this."
     },
     {
       "file": "variant-crazyhouse.pgn",
-      "rule": "3b",
-      "disposition": "clean",
-      "warnings": [],
+      "rule": "4",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 6,
       "truncatedAtPly": null,
-      "note": "This fixture rewrote rule 3b (B-113, addendum accepted session 5), so the disposition here is the AMENDED one: a supported variant whose moves are legal under its own rules is `clean`, exactly like a standard game. MEASURED: chessops's startingPosition() reads the Variant tag and returns a Crazyhouse position, so the mainline derives correctly — pocket in the FEN, drop `P@e4` played as a drop. The original rule assumed a useless 'illegal move at ply 2' here and would have had the importer derive nothing for a game the UI plays through in full. The premise turned out to be true of Rust and false of TypeScript: shakmaty requires the caller to choose a variant, chessops reads the tag. Two libraries, opposite defaults, same tag — the B-064 category, which the old rule would have frozen into the specification."
+      "note": "A legal Crazyhouse game imports normally — variants are selected, not refused. MEASURED: chessops's startingPosition() reads the Variant tag and returns a Crazyhouse position, so the mainline derives correctly, pocket visible in the FEN and `P@e4` played as a drop. shakmaty covers the same eight rule sets via VariantPosition behind its `variant` cargo feature; the difference is that it must be ASKED, which is the asymmetry behind ADR-0008's addendum."
     },
     {
       "file": "variant-unknown-name.pgn",
-      "rule": "3b",
-      "disposition": "imported",
-      "warnings": ["variant_unsupported"],
+      "rule": "4",
+      "outcome": "error",
+      "errorCode": "invalid_start_position",
       "plies": 0,
       "truncatedAtPly": 0,
-      "note": "The branch where rule 3b genuinely earns its place: a Variant tag naming something chessops does not implement (\"Grand Chess\") makes startingPosition() return ERR_VARIANT, which our reader surfaces as truncatedAtPly 0 — the same value it uses for an unparseable FEN. So 'this is a variant we do not support' and 'this position is garbage' are currently the same observable, which is exactly the misdiagnosis rule 3b was written to prevent, just arriving through a different door than the ADR expected."
+      "note": "ERRORS because the library refuses to build the start position: a Variant tag naming something neither implements (\"Grand Chess\") fails symmetrically — ParseVariantError in shakmaty, ERR_VARIANT in chessops. Both libraries distinguish that from a malformed FEN in their own error kinds, so the detail can carry the distinction without us inferring it. Worth keeping for what the frontend does: startingPosition() failing surfaces as truncatedAtPly 0, the same observable as a bad FEN."
     },
     {
       "file": "variant-chess960-no-fen.pgn",
-      "rule": "3b",
-      "disposition": "imported",
-      "warnings": ["variant_assumed_standard"],
+      "rule": "4",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 4,
       "truncatedAtPly": null,
-      "note": "MEASURED: [Variant \"Fischerandom\"] silently maps to standard chess and the standard starting position, so a Chess960 game with no FEN header derives a plausible, wrong mainline with no error. Quieter than the unknown-variant case and harder to notice, because everything succeeds. Chess960 exports normally carry SetUp/FEN, which is what saves this in practice — but 'normally' is doing the work in that sentence."
+      "note": "IMPORTS a plausible wrong game — an ACCEPTED RISK, and the quietest failure in the corpus. MEASURED: [Variant \"Fischerandom\"] silently maps to STANDARD chess and the standard starting position, so a Chess960 game with no FEN header derives a mainline that is legal and wrong, reporting nothing. Catching it means checking variant names against a list we maintain, which is a rulebook. Accepted because real Chess960 exports carry SetUp/FEN — and 'normally' is doing the work in that sentence."
     },
     {
       "file": "dedupe-original.pgn",
-      "rule": "6",
-      "disposition": "clean",
-      "warnings": [],
+      "rule": "1",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 7,
       "truncatedAtPly": null,
-      "note": "Half of the rule 6 pair. POST-MVP SPECIFICATION: rule 6 was removed from the MVP by the session-5 addendum — nothing hashes a game any more, because dedupe protects against re-importing one file twice, which is not what ADR-0004's derivability condition needs. Kept in the corpus because these two files are the evidence for whenever dedupe is designed (B-022). Ten tags, per-move { [%clk] } comments, movetext wrapped across three lines, LF endings."
+      "note": "Both dedupe fixtures simply import, because there is no dedupe: ADR-0008's content key was removed from the MVP before ADR-0009 removed the rest. Kept as specification for B-022, whenever merging earns a customer. Ten tags, per-move { [%clk] } comments, movetext wrapped across three lines, LF endings."
     },
     {
       "file": "dedupe-rewrapped.pgn",
-      "rule": "6",
-      "disposition": "clean",
-      "warnings": [],
+      "rule": "1",
+      "outcome": "imports",
+      "errorCode": null,
       "plies": 7,
       "truncatedAtPly": null,
-      "note": "The same game re-exported: seven tags instead of ten, clock comments stripped, different line wrapping, CRLF endings, result token on its own line. Byte-different in every respect a naive hash would notice, identical in players, event, date, round, result and moves. Whenever dedupe is built (B-022), a key over the normalised game must merge these two and a key over the bytes must not — and it must include the variant, which the Seven Tag Roster does not carry. That hole is why the rule got re-examined at all, and the better answer was to delete the mechanism from the MVP rather than patch the key."
+      "note": "The same game re-exported: seven tags, clock comments stripped, different wrapping, CRLF endings, marker on its own line. Byte-different in every respect a naive hash would notice, identical in players, event, date, round, result and moves. Importing both produces two rows — the expected MVP behaviour, worth a test so nobody 'fixes' it into a silent merge. Whenever B-022 keys on games, the key must include the variant."
     }
   ]
 }

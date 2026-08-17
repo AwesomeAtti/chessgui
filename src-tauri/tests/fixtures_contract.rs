@@ -1,7 +1,7 @@
 //! The Rust half of the shared fixture corpus contract.
 //!
 //! There is no PGN code here yet — `pgn-reader` and `shakmaty` arrive with B-007 — so this does
-//! not walk a mainline or assert a disposition. What it does assert is the part most likely to
+//! not walk a mainline or assert an outcome. What it does assert is the part most likely to
 //! break silently: that `fixtures/pgn/` is reachable from `src-tauri/`, that its manifest parses,
 //! and that every file the manifest lists actually exists.
 //!
@@ -61,12 +61,23 @@ fn shared_corpus_is_reachable_and_every_listed_fixture_exists() {
             .expect("every fixture entry needs a `file` string");
         assert!(dir.join(name).is_file(), "missing fixture file: {name}");
 
-        // Keeps the two suites honest about ADR-0008 rule 1's vocabulary: a typo here would
+        // Keeps the two suites honest about ADR-0009 rule 1's vocabulary: a typo here would
         // otherwise be asserted against on one side and ignored on the other.
-        let disposition = entry["disposition"]
+        let outcome = entry["outcome"]
             .as_str()
-            .expect("every fixture entry needs a `disposition` string");
-        let known = matches!(disposition, "clean" | "imported" | "quarantined");
-        assert!(known, "unknown disposition in {name}: {disposition}");
+            .expect("every fixture entry needs an `outcome` string");
+        assert!(
+            matches!(outcome, "imports" | "error"),
+            "unknown outcome in {name}: {outcome}"
+        );
+
+        // An error with no code cannot be shown to a user, and a code on a game that imports is a
+        // contradiction. Both are easy to introduce by hand-editing the manifest.
+        let code = entry["errorCode"].as_str();
+        if outcome == "error" {
+            assert!(code.is_some(), "{name} expects an error but names no code");
+        } else {
+            assert!(code.is_none(), "{name} imports but names an error code");
+        }
     }
 }

@@ -117,30 +117,35 @@ describe("clampPly", () => {
 });
 
 /**
- * The shared corpus (B-099).
+ * The shared corpus (B-099), now governed by **ADR-0009 — strict import**.
  *
- * Deliberately asserts the same `expected.json` numbers the Rust importer will assert, so a
- * disagreement between `chessops` and `shakmaty` shows up as one side's suite going red against a
- * file the other side still passes (B-064).
+ * ADR-0008's permissive tiers were superseded: a game either imports or produces exactly one
+ * error. The corpus did not shrink, because a corpus of files that must be *rejected* is exactly as
+ * useful as one of files to be repaired — twelve of the eighteen are now expected errors.
  *
  * **Two kinds of field, and the difference matters.** `plies` and `truncatedAtPly` are *observed* —
- * measured from this reader and asserted here. `disposition` and `warnings` are *specification*:
- * what ADR-0008 requires of an importer that does not exist yet, asserted by nobody until B-007.
- * Keeping them in one file is deliberate, because the point of the corpus is that both sides read
- * the same expectations; pretending the second pair is verified would be the same mistake as
- * calling a throwaway script a test suite (B-106).
+ * measured from this reader and asserted here. `outcome` and `errorCode` are *specification*: what
+ * ADR-0009 requires of an importer that does not exist yet, asserted by nobody until B-007. Keeping
+ * both in one file is deliberate, because the point of the corpus is that both sides read the same
+ * expectations; pretending the second pair is verified would be the same mistake as calling a
+ * throwaway script a test suite (B-106).
+ *
+ * **Why a rejected game still has observed values.** The importer refusing a game does not mean the
+ * frontend reader must throw on it — a game already in the library has to stay viewable if a later
+ * parser change would reject it. So `mainline.ts` keeps truncating, and these numbers describe
+ * display behaviour, not import policy.
  *
  * `plies` is asserted separately from `truncatedAtPly` because the worst cases are the ones that
  * lose moves while reporting success — see the `unterminated-comment` fixture, which drops four
- * plies and a result token with `truncatedAt` null.
+ * plies and a termination marker with `truncatedAt` null.
  */
 interface ExpectedFixture {
   readonly file: string;
   readonly rule: string;
-  /** Specification for B-007's importer. Nothing asserts this yet. */
-  readonly disposition: "clean" | "imported" | "quarantined";
-  /** Specification for B-007's importer. Codes are provisional. */
-  readonly warnings: readonly string[];
+  /** Specification for B-007's importer (ADR-0009 rule 1). Nothing asserts this yet. */
+  readonly outcome: "imports" | "error";
+  /** Specification for B-007's importer. `null` when the game imports. Codes are provisional. */
+  readonly errorCode: string | null;
   /** Observed: how many plies this reader derives. */
   readonly plies: number;
   /** Observed: where derivation stopped, or `null` if it ran to the end of what it could see. */
@@ -156,7 +161,7 @@ const expected: readonly ExpectedFixture[] = (
   }
 ).fixtures;
 
-const DISPOSITIONS = ["clean", "imported", "quarantined"];
+const OUTCOMES = ["imports", "error"];
 
 describe("shared fixture corpus", () => {
   test("the corpus is reachable and non-empty", () => {
@@ -176,18 +181,34 @@ describe("shared fixture corpus", () => {
     expect(onDisk).toEqual(expected.map((f) => f.file).sort());
   });
 
-  test("every ADR-0008 rule with a testable consequence has at least one fixture", () => {
-    // Rules 1–6 plus 3b. Rule 7 is the import report, which is UI (B-097) and has nothing to
-    // assert against a file. This is what stops the corpus quietly going stale as rules change.
+  test("every ADR-0009 rule with a testable consequence has at least one fixture", () => {
+    // Rules 1, 3 and 4. Rule 2 — nothing is repaired and rejected games are not stored — is a
+    // constraint on the implementation rather than an observable property of a file, so it has no
+    // fixture and should not have one. This assertion is what stops the corpus going stale when the
+    // policy changes: it failed loudly when ADR-0009 replaced ADR-0008's seven rules with four.
     const covered = new Set(expected.map((f) => f.rule));
 
-    expect([...covered].sort()).toEqual(["1", "2", "3", "3b", "4", "5", "6"]);
+    expect([...covered].sort()).toEqual(["1", "3", "4"]);
   });
 
-  test("every entry uses ADR-0008's disposition vocabulary", () => {
-    // Same assertion the Rust side makes, so a typo cannot be asserted against on one side and
-    // ignored on the other.
-    for (const f of expected) expect(DISPOSITIONS).toContain(f.disposition);
+  test("every entry uses ADR-0009's outcome vocabulary, and error codes match the outcome", () => {
+    for (const f of expected) {
+      expect(OUTCOMES).toContain(f.outcome);
+      // An outcome of `error` without a code is useless to a user, and a code on a game that
+      // imports is a contradiction. Both are easy to introduce by hand-editing the manifest.
+      if (f.outcome === "error") expect(f.errorCode).toBeTruthy();
+      else expect(f.errorCode).toBeNull();
+    }
+  });
+
+  test("the corpus covers both outcomes, not just rejections", () => {
+    // Twelve rejections and six imports. A corpus that only held invalid files would be passed by
+    // an importer that refuses everything — the same negative-control reasoning as `clean-standard`,
+    // one level up.
+    const imports = expected.filter((f) => f.outcome === "imports");
+
+    expect(imports.length).toBeGreaterThan(1);
+    expect(expected.length - imports.length).toBeGreaterThan(1);
   });
 
   test.for(expected)("$file (ADR-0008 rule $rule)", (fixture) => {
@@ -202,12 +223,12 @@ describe("shared fixture corpus", () => {
     expect(m.san).toHaveLength(fixture.plies);
     expect(m.fens).toHaveLength(fixture.plies + 1);
 
-    if (fixture.disposition === "clean") {
-      // A "clean" fixture that is not actually legal accuses working code — the session-3 trap,
-      // which caught three of my own bad fixtures while this corpus was being written.
+    if (fixture.outcome === "imports") {
+      // A game the libraries accept must not have stopped part-way. Note the absent assertion:
+      // an importing fixture is *not* required to have moves, because three of them legitimately
+      // have none — the libraries accept a game with no movetext and ADR-0009 adds no rule of ours
+      // to refuse it. The per-fixture `plies` assertion above is what catches a bad fixture.
       expect(m.truncatedAt).toBeNull();
-      expect(m.san.length).toBeGreaterThan(0);
-      expect(fixture.warnings).toEqual([]);
     }
   });
 });

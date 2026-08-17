@@ -16,8 +16,9 @@ Written after the work, not before — the two previous handovers both carried a
 "uncommitted" claim in this position because the header went out of date during the session it
 described.
 
-**State in one line:** M1 closed and owner-verified, ADR-0008 accepted, and the project now has a
-test harness, which it did not before. Next task is **B-099**, now actually startable.
+**State in one line:** M1 closed and owner-verified, the project now has a test harness and a PGN
+fixture corpus, and **import policy is ADR-0009 — strict, four rules, ADR-0008 superseded**. Next task
+is **B-007 milestone 1**, a measurement with no product code.
 
 ## Project summary
 
@@ -30,8 +31,11 @@ Tauri 2 + React 19 skeleton with a static board, a mock game list, and navigatio
 
 **Stage 3 — M1 skeleton complete and verified; M2 (import) is next.** All gates closed:
 ADR-0001 (Tauri 2), ADR-0002 (GPL-3.0), ADR-0003 (chess libraries), ADR-0004 (SQLite),
-ADR-0005 (data model), ADR-0006 (React 19), ADR-0007 (layout C+), and ADR-0008 (import
-fidelity, `proposed` — the only one not yet accepted).
+ADR-0005 (data model), ADR-0006 (React 19), ADR-0007 (layout C+), ADR-0008 (import fidelity —
+accepted, amended, then **superseded**), and **ADR-0009 (strict import), which is the live policy**.
+
+Two ADRs govern import and only one of them is current. Read ADR-0009; read ADR-0008 for how the
+question was worked through, and note that its main body is no longer what we do.
 
 **The document-to-code ratio finally moved.** Session 3 wrote the first product code in the
 repository. Risk 5 is downgraded but not closed — see the risk register.
@@ -298,7 +302,54 @@ Session 4:
 
 Session 5:
 
-- **ADR-0008 amended, and both halves were changed by something outside the document** — one
+- **ADR-0009 — import is strict, and ADR-0008 is superseded (B-114).** The owner rejected the
+  permissive tiered policy as disproportionate, and the evidence backs that rather than the ADR.
+  **Four rules replace seven:** a game imports or it errors; nothing is repaired; **the libraries are
+  the validator and we add nothing**; variants are selected from the tag.
+- **Two follow-up corrections from the owner, and both cut further than the first pass did.**
+  *(a)* **"We cannot change the behaviour of dependencies — use their error handling and validation."**
+  My first draft of ADR-0009 listed conditions the libraries *accept* — duplicate tags, a `Result`
+  disagreeing with the termination marker, missing roster tags — which meant we would have had to check
+  them ourselves. That is a validator by another name. Removed, along with the one exception I had
+  argued for (a zero-moves guard to keep a PNG file out of the library), which was the same mistake
+  wearing a smaller hat. **Consequence, stated plainly: only 4 of 18 fixtures are now errors**, and
+  a non-PGN file imports as one empty junk row. Everything the libraries tolerate is now an entry in
+  ADR-0009's **"Accepted risks"** table — seven of them, each measured, each with why it is accepted.
+  *(b)* **Derivability was a production concern carried by a development-stage app.** It had acquired
+  an owner, a re-hardening gate, conditions in two ADRs and a presence in three documents, for a fact
+  that is one sentence: **we do not delete the PGN files, so the database is disposable.** B-078
+  deferred to P3, and the ADRs' reasoning simplified accordingly. It becomes real at B-015.
+  **Two facts decided it, and the frequency argument is neither of them.** The only real data anyone
+  has looked at is spotless — B-101's chess.com survey found zero anomalies, and the malformed tail
+  rules 4 and 5 existed for has *still* never been measured. And **ADR-0008's own safety argument was
+  weaker than it looked**: it justified permissiveness with "repair cannot corrupt and rejection
+  cannot lose" because verbatim PGN sits in the row, but the stronger fact is outside the database
+  entirely — **the PGN file is still on the user's disk**, so refusing a game loses nothing the
+  filesystem had not already kept. Permissiveness was free in safety and expensive in complexity, and
+  only the first half had ever been weighed.
+  **The clinching case is a fixture.** Under ADR-0008, a German file imported with a heuristic warning
+  attached to a game that was never played, because the tokenizer rewrites `Sf3` to `f3`. Under
+  ADR-0009 it is an error — which is the accurate answer, since PGN mandates English SAN and the file
+  genuinely does not conform.
+- **What the simplification bought, concretely.** **B-098 rejected outright** rather than deferred.
+  `src/model/game.ts` never gains the disposition and warning columns ADR-0008 required — and they
+  were specified but never added, so there was nothing to unwind and B-011's migration stays smaller.
+  B-097 shrinks from "surface rare warnings without training the user to dismiss them" to "list the
+  errors". B-100 keeps only variant selection. And **B-064's shared assertion becomes boolean**: the
+  two rule implementations now only have to agree on whether a game is valid, not on the ply at which
+  a mainline truncates.
+- **The B-099 corpus was repurposed, not wasted, and that is the argument for having built it early.**
+  All eighteen fixtures kept — **4 expected errors and 14 expected imports** once the "libraries are the validator" correction landed, with
+  `disposition`/`warnings` replaced by `outcome`/`errorCode`. **The corpus changed the governing
+  decision twice in one session** (rule 3b, then the whole policy) and survived both, because a file
+  that must be *rejected* is exactly as useful a fixture as a file to be repaired. The rule-coverage
+  test earned its keep immediately by failing the moment seven rules became four.
+- **B-007's spec rewritten against ADR-0009 and cut from six milestones to four.** Milestone 1 is
+  unchanged and still the important one: measure whether `pgn-reader` alters tokens the way chessops
+  does, because if it does, strictness needs an explicit check rather than a trusting one — the parser
+  will hand back a game it has silently changed.
+- **ADR-0008 amended earlier in the same session, and both halves were changed by something outside
+  the document** — one
   measurement and one owner challenge. Status is still `accepted`; the addendum is at the end of the
   ADR and the header points at it. **Rule 3b superseded: select the variant named in the tag and walk
   it, on both sides.** Verified rather than assumed — `shakmaty` exposes `VariantPosition` with the
@@ -363,10 +414,14 @@ The kit is at 0.2.0.
   job rather than a refactor. Layout must tolerate ~35% text expansion.
 - **Read-only MVP must not become a read-only schema** (B-050). Header columns are derived;
   the verbatim PGN is the source of truth; rows carry stable IDs from the first migration.
-- **The database must stay derivable** (ADR-0004, B-078). PGN files are the retained source of
-  truth; import is idempotent; dropping and rebuilding the DB is a supported path. This is the
-  condition the whole storage decision rests on — if it lapses quietly, the gate re-hardens and
-  nobody notices.
+- **We do not delete PGN files, so the database is disposable** — drop it and import again.
+  **That is the whole of it, and it replaces a much larger apparatus** (session 5). "Derivability"
+  had acquired an owner (B-078, P1), a gate that "re-hardens", conditions quoted in two ADRs, and a
+  place in three documents, for a fact that fits in one sentence. The owner's objection was that this
+  is a production concern being carried by a development-stage app with no user data, which is
+  correct. B-078 is deferred to P3; **do not quote derivability as a constraint on new work.** It
+  becomes real at B-015, when annotations are the first data that exists nowhere else — and the answer
+  then is an export path (B-017/B-079), not a doctrine.
 - **`src/shell/` is the only place `@tauri-apps/api` may be imported** (ADR-0001). This is the
   concrete form of the Electron-portability constraint above, and it is now enforced by
   `npm run check:i18n` in CI rather than by remembering.
@@ -778,14 +833,17 @@ of `.pgn` files on disk, mirroring the TypeScript assertion, so a fixture added 
 never listed — read by nothing, asserted by nothing — now fails. **Needs one more `cargo fmt` and
 `cargo test` pass**, since the AI cannot run either.
 
-1. **B-007 — PGN import, and it is the next real build.** Everything in front of it is now closed:
-   ADR-0008 is accepted *and* amended, the fixture corpus exists, and the two rules most likely to
-   have been implemented wrongly have been corrected before any code was written. **Large tier, so it
-   needs a feature spec via `ai/prompts/feature.md` first.** Three things the spec must carry that
-   were not knowable a session ago: `src-tauri/Cargo.toml` needs `shakmaty`'s `variant` feature;
-   the importer must select the variant from the tag rather than inheriting a default; and there is
-   **no content key and no dedupe** — stable row IDs only. Mostly Rust, therefore mostly unverifiable
-   in the AI sandbox: plan that split explicitly rather than rediscovering it.
+1. **B-007 — PGN import. The spec is written and awaiting approval:
+   `docs/feature-specs/b007-pgn-import.md`.** Everything in front of it is closed — ADR-0008 accepted
+   *and* amended, corpus in place, and the two rules most likely to have been implemented wrongly
+   corrected before any code existed. Two scope calls to agree or reject: **paste before file**, since
+   a dialog is a platform surface (B-069) and paste needs none; and **no database**, with B-011
+   persisting what import produces, which keeps SQLite and player identity out of an already-large
+   feature. **Milestone 1 is a measurement with no product code**, because `pgn-reader`'s tokenizer
+   behaviour is unknown and B-099 showed `chessops` silently rewrites `Sf3` to `f3` — whether the
+   Rust side agrees decides how rule 4 is built, and a disagreement is B-064 tested rather than
+   discussed. The Rust/sandbox split is handled rather than lamented: the corpus means one
+   `cargo test` asserts eighteen cases whose expected values were measured before the code.
 2. **B-113 — done (session 5).** ADR-0008's addendum is accepted: rule 3b superseded, rule 6 out of
    the MVP. Read the addendum before implementing either.
 3. **B-099 — done (session 5).** ADR-0008 went from seven rules and zero evidence to seven rules
