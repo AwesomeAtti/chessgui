@@ -27,9 +27,12 @@ jobs:
     name: Frontend (typecheck, guardrails, build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # v6 for both: v4 targets Node 20, which the runners now force onto Node 24 and
+      # warn about. setup-node v6 limits automatic caching to npm, which is what the
+      # explicit `cache: npm` below asks for anyway.
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -61,9 +64,12 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      # v6 for both: v4 targets Node 20, which the runners now force onto Node 24 and
+      # warn about. setup-node v6 limits automatic caching to npm, which is what the
+      # explicit `cache: npm` below asks for anyway.
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -83,7 +89,15 @@ jobs:
             file \
             wget
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned rather than `@stable`, so CI does not silently drift away from the
+      # version the app is actually developed against (B-082). The developer machine
+      # uses Homebrew Rust, which has no rustup and therefore ignores
+      # rust-toolchain.toml — pinning here is the only half of that pin available.
+      # Bump this deliberately, in step with the local toolchain.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -95,5 +109,16 @@ jobs:
       - name: Build frontend
         run: npx vite build
 
+      # B-080. Both pass locally on 1.95.0 with zero output, so this is a guard against
+      # regression rather than a cleanup task. Linux only: formatting and lints are
+      # platform-independent, and running them three times just costs minutes.
+      - name: Check formatting
+        if: matrix.platform == 'ubuntu-22.04'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Clippy
+        if: matrix.platform == 'ubuntu-22.04'
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
       - name: Build Tauri app
-        run: cargo build --manifest-path src-tauri/Cargo.toml --verbose
+        run: cargo build --manifest-path src-tauri/Cargo.toml --locked --verbose
