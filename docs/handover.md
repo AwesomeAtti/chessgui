@@ -266,6 +266,26 @@ Session 4:
   game, so **legality cannot arbitrate**. That is B-098, and it is the same species of error as
   the master–detail claim in session 3: an implementation that sounds obviously right and was
   never checked against a real case.
+  **Amended within the same session, because the owner challenged the premise and was right.**
+  The draft claimed imports-with-warnings would be common; the owner's objection was that
+  chess.com and lichess exports are machine-generated and should be clean, so most imports will be
+  `clean`. **That claim of mine had no evidence and is withdrawn** — the fourth unmeasured
+  assertion this project has had to retract, and the most embarrassing of them, because it was
+  about *the user's own data*, the cheapest thing available to check. Raised **B-101** to actually
+  measure it. **B-098 dropped P1 → P3** since localised SAN barely exists for this user, though the
+  correctness finding is kept at full strength for whenever someone does touch it.
+  **The policy survived the challenge for a reason worth keeping, and it is not frequency:** the
+  clean bulk is re-downloadable from the site it came from, and the tail — club games, arbiter
+  exports, hand-typed games in "loose PGN files", which the vision names as part of this user's
+  corpus — is not. Losing four irreplaceable games while importing 3,000 replaceable ones is
+  failing at the only part that mattered. Two rules also fire constantly on clean input and are
+  not malformed-PGN rules at all: dedupe runs on every re-import, which *is* the normal chess.com
+  workflow, and the variant rule is triggered by a tag those sites emit on purpose.
+  **Following the owner's premise then found a real gap, which is the best argument for the
+  challenge:** it is the *clean* sources that emit variants. Lichess tags them explicitly, and
+  walking an Antichess game under standard rules reports *illegal move at ply 2* — true, useless,
+  and a misdiagnosis that would send someone hunting a parser bug. New rule 3b suspends move
+  derivation on a non-standard `Variant` tag instead; **B-100**.
 
 ## Process change made this session
 
@@ -340,8 +360,21 @@ Session 4:
 - **Risk 9 updated**: measurement has now overturned reasoning three times, and the rule was
   written down rather than left as three anecdotes.
 - **B-049 closed as ADR-0008 — the PGN import fidelity policy**, the last thing standing in
-  front of B-007. **Raised B-097 – B-099.** Written up under "Decided" below, because the
+  front of B-007. **Raised B-097 – B-101.** Written up under "Decided" below, because the
   reasoning matters more than the outcome.
+- **`scripts/survey-pgn.mjs` written and tested — the instrument for B-101.** Dependency-free
+  Node; `npm run survey:pgn -- <path>`. **It reports counts and shapes only — no player names, no
+  game text, no filenames — so its output is safe to paste into a public repo**, which is the
+  design constraint that shaped it rather than an afterthought. Verified against synthetic
+  fixtures covering every metric, **with a negative control** (a clean lichess-shaped file reports
+  no anomalies) and a robustness pass (random binary, empty file, truncated tags, unbalanced
+  parens — no crash, no hang). The negative-control habit is now three for three on this project:
+  `check:i18n`, B-048's plain-browser baseline, and this.
+  **One result from the fixtures is worth keeping, because it validates rule 6's design rather
+  than merely exercising it:** a game re-exported with different line wrapping, stripped clock
+  comments and four fewer tags produced an *identical* content key to the original. That is
+  precisely the case a hash over raw bytes would have missed and duplicated, and it is now
+  demonstrated rather than argued.
 
 Session 3:
 
@@ -488,15 +521,24 @@ Session 1:
    the one item that got measured turned out to be misjudged. Worth remembering before treating
    any other entry on this list as sized.
 
-    **Updated session 4 — this is now a pattern of three, not an anecdote.** The IPC flood was
-    over-sized (risk 9), a benchmark nearly returned a false negative (risk 10), and the
-    live-resize glitch was confidently attributed to the most complicated code in the frontend
-    and turned out to belong to the webview (M1-F3, B-096). Every one of those explanations was
-    coherent and plausible before it was checked. **In all three, the check was cheap** — a
-    plain-browser control, a recorded power state, one window drag on a different tab. The
-    working rule that falls out: when a symptom has an obvious culprit in our own code, find the
-    control *first*, because the cost of running one is minutes and the cost of acting on a
-    plausible story is rework plus a false belief that outlives it.
+    **Updated session 4 — this is now a pattern of four, not an anecdote.** The IPC flood was
+    over-sized (risk 9), a benchmark nearly returned a false negative (risk 10), the live-resize
+    glitch was confidently attributed to the most complicated code in the frontend and turned out
+    to belong to the webview (M1-F3, B-096), and ADR-0008 asserted a malformed-PGN frequency that
+    nobody had counted (B-101). Every one of those explanations was coherent and plausible before
+    it was checked. **In all four, the check was cheap** — a plain-browser control, a recorded
+    power state, one window drag on a different tab, and an export of the owner's own games.
+    The working rule that falls out: when a symptom has an obvious culprit in our own code, or a
+    plan rests on how often something happens, find the control *first*, because the cost of
+    running one is minutes and the cost of acting on a plausible story is rework plus a false
+    belief that outlives it.
+    **The fourth one is different from the first three in a way worth recording.** The others
+    were caught by measurement; this one was caught by the *owner disagreeing*, and it was the AI
+    that had produced the unevidenced claim, inside a document whose whole purpose was to be more
+    careful than a guess. Two lessons. A stated frequency is a measurement claim even when it is
+    phrased as a design assumption — "this will be common" needed a number and got a vibe. And
+    following the objection through, rather than merely conceding it, is what found B-100: the
+    clean sources emit variants, so the gap was in the direction the owner was pointing.
 10. **A benchmark nearly produced a false negative against ADR-0001.** macOS Low Power Mode
     capped the machine to 30 fps on mains power, and the first spike run looked like a failure.
     A plain-browser control on the same machine is what caught it (B-077). Any future
@@ -510,7 +552,16 @@ Session 1:
    second look before it hardens is **rule 6, the duplicate-identity key** — the only rule in the
    ADR that can lose a game the user expected to see, and a judgement rather than a consequence
    of something already decided.
-2. **B-099 — the malformed-PGN fixture corpus, before B-007 rather than after.** ADR-0008 is
+2. **B-101 — run the survey on your real exports. The instrument is built and tested; only the
+   data is missing.** `npm run survey:pgn -- ~/path/to/pgn` (or a directory). It prints counts and
+   shapes only — no names, no game text, no filenames — so the output can be pasted straight into
+   the backlog. Promoted above the fixture corpus deliberately: it settles the frequency argument
+   with data instead of confidence, and it tells B-099 which fixtures are worth writing.
+   **The number to look at first is same-file content-key collisions**, because that is the only
+   direct evidence about rule 6, the highest-regret rule in ADR-0008. Cross-file collisions are
+   the rule working as intended (overlapping re-exports); same-file collisions are candidate false
+   merges and should be eyeballed individually.
+3. **B-099 — the malformed-PGN fixture corpus, before B-007 rather than after.** ADR-0008 is
    seven rules and currently zero evidence; the fixtures are what turn it from a document into
    something that can fail. It is also the cheapest moment: fixtures written against a policy
    test the policy, whereas fixtures written against a finished importer tend to be the ones the

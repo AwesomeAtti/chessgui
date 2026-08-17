@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
-    "check:i18n": "node scripts/check-no-literals.mjs"
+    "check:i18n": "node scripts/check-no-literals.mjs",
+    "survey:pgn": "node scripts/survey-pgn.mjs"
   },
   "dependencies": {
     "chessground": "^9.2.1",
