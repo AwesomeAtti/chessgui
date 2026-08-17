@@ -768,9 +768,15 @@ could not verify itself: `cargo fmt` reformatted a single statement, `cargo test
 therefore been run locally** — fmt, clippy, cargo test, typecheck, guardrails, frontend build and
 `npm test` — so session 5 is committable with nothing left on "should work". The only claim in it
 that a human has not personally checked is a visual one, and there are none: this session touched
-no UI. **Note that the Rust suite has not been re-run since B-099 grew the corpus from two fixtures
-to eighteen** — `fixtures_contract.rs` iterates the manifest, so it should simply assert more, but
-that sentence is a prediction and not a result.
+no UI. **The Rust suite was re-run after B-099 grew the corpus from two fixtures to eighteen and
+still passes — and the way it passed is itself worth recording.** It reported the same single green
+test as before, because its only structural assertion was that the manifest is *non-empty*: it would
+have said exactly that whether it read two entries or eighteen. A test that cannot tell a 9×
+change in its own input is a green light with no information in it, which is the failure this
+project keeps meeting in new costumes. Strengthened to assert the manifest count equals the number
+of `.pgn` files on disk, mirroring the TypeScript assertion, so a fixture added to the directory and
+never listed — read by nothing, asserted by nothing — now fails. **Needs one more `cargo fmt` and
+`cargo test` pass**, since the AI cannot run either.
 
 1. **B-007 — PGN import, and it is the next real build.** Everything in front of it is now closed:
    ADR-0008 is accepted *and* amended, the fixture corpus exists, and the two rules most likely to

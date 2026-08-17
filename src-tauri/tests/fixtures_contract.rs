@@ -39,6 +39,22 @@ fn shared_corpus_is_reachable_and_every_listed_fixture_exists() {
     // green test. Same guard as the TypeScript side.
     assert!(!fixtures.is_empty(), "the shared corpus is empty");
 
+    // And the count, because "not empty" is far too weak: this test reported the same single pass
+    // when the corpus held two fixtures and when it held eighteen. A fixture added to the
+    // directory but never added to the manifest is read by nothing and asserted by nothing, which
+    // is the quiet half of the same failure. Mirrors the TypeScript assertion.
+    let on_disk = fs::read_dir(&dir)
+        .expect("fixtures/pgn/ is unreadable")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "pgn"))
+        .count();
+    assert_eq!(
+        on_disk,
+        fixtures.len(),
+        "fixtures/pgn/ holds {on_disk} .pgn files but expected.json lists {}",
+        fixtures.len()
+    );
+
     for entry in fixtures {
         let name = entry["file"]
             .as_str()
