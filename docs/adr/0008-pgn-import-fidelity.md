@@ -1,8 +1,8 @@
 # ADR-0008: PGN import fidelity — accept, repair, or reject
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-08-17
-- **Deciders:** Owner (session 4)
+- **Deciders:** Owner (session 4) — accepted after one substantive challenge, recorded below
 - **Backlog link:** B-049 — blocks B-007; constrains B-011, B-073, B-078
 
 ## Context

@@ -124,3 +124,24 @@ punctuated. That is **B-105**.
 byte-identical wherever both appear (21/21 in the sample, zero mismatches). The JSON field is
 *absent* on 4 of 25 games whose PGN still carries the tag, so it is strictly the less available
 copy. Per B-102 both opening values come from the PGN tags.
+
+## Addendum, 2026-08-17 — `whiteAccuracy` / `blackAccuracy` (B-104)
+
+chess.com reports accuracy percentages per player, present on 100% of the measured sample. Decided:
+**store them as columns on the game.**
+
+**This is the first field in the model that breaks its governing rule, and the exception needs to be
+explicit rather than discovered.** "Store the raw thing, derive the useful thing" works because
+every derived value can be recomputed from the retained PGN. Accuracy cannot — it is another
+engine's output, and no amount of re-parsing the PGN will reproduce it. It is neither raw (we did
+not observe it) nor derivable (we cannot recompute it). It is **retained third-party judgement**.
+
+**The consequence that matters, because it can break something load-bearing silently:** ADR-0004's
+storage gate rests on the database staying derivable (B-078) — drop it, re-import, get the same
+database back. If accuracy lives only in a column and only the PGN is retained, a rebuild loses it
+and the derivability condition quietly stops holding. **So storing accuracy obliges B-012 to retain
+the source JSON for API-imported games**, not just the PGN it contains. B-011's migration and
+B-012's importer both inherit that.
+
+Display rule: never present these as the application's own assessment. B-019 will compute our own
+accuracy figures and they will disagree with these, so the provenance has to survive into the UI.

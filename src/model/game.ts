@@ -101,6 +101,22 @@ export interface Game {
   readonly plyCount: number | null;
 
   /**
+   * Accuracy percentages as reported by the source, not computed by us (B-104).
+   *
+   * These break the pattern every other field here follows, and the exception is deliberate.
+   * Every other derived value can be recomputed from the PGN text; **this one cannot be
+   * recomputed at all** — it is chess.com's own engine output, and no amount of re-parsing the
+   * PGN will produce it. That has a consequence B-011 and B-012 must honour: **storing this
+   * only stays compatible with the derivability condition (B-078) if the source JSON is
+   * retained for API-imported games.** Rebuild-from-PGN would otherwise silently lose it.
+   *
+   * Never present these as the application's own assessment. B-019 will compute our own
+   * numbers, and they will disagree with these.
+   */
+  readonly whiteAccuracy: number | null;
+  readonly blackAccuracy: number | null;
+
+  /**
    * The complete tag set (B-060), including tags we do not promote and tags we have
    * never heard of. Nothing from a PGN file is silently discarded.
    */

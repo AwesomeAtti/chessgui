@@ -4,11 +4,18 @@
 > (human or AI) can resume with zero chat history.
 
 **Last updated:** 2026-08-17 · **Updated by:** AI (Stage 3 / session 4) · **Kit version:** 0.2.0
-· **Head at session start:** `61fe8ed`, clean, and `origin/main` level with it — session 3 was
-committed and pushed in seven increments. **The previous header claimed session 3 was
-uncommitted; that was written before the commits and never corrected.** This is the second
-consecutive handover to carry that same stale sentence, which is worth noticing: the header is
-written first and then goes out of date during the session it describes. Write it last.
+
+**Head at session start:** `61fe8ed`, clean, `origin/main` level with it. **Session 4 committed in
+four increments** — `524772d`, `20303e7`, `62a25d7`, plus a final commit carrying the `ecoUrl` and
+accuracy model changes, this handover, and the `.gitignore` rule. **Check `git log origin/main..HEAD`
+before finishing: three of those commits were still unpushed when the session ended.**
+
+Written after the work, not before — the two previous handovers both carried a stale
+"uncommitted" claim in this position because the header went out of date during the session it
+described.
+
+**State in one line:** M1 closed and owner-verified, ADR-0008 accepted, the import path fully
+specified and not yet started. Next task is **B-099**.
 
 ## Project summary
 
@@ -357,8 +364,16 @@ Session 4:
 - **M1-F2 resolved as a decision rather than a fix** — Cmd+W on the library tab keeps closing
   the window; the deliberate fall-through is now commented in `App.tsx`, with an expiry note
   pointing at B-015.
-- **Risk 9 updated**: measurement has now overturned reasoning three times, and the rule was
-  written down rather than left as three anecdotes.
+- **Risk 9 updated**: measurement has now overturned reasoning five times, and the rule was
+  written down rather than left as a pile of anecdotes.
+- **Three decisions taken at the end of the session and pushed into the model, not just the prose:**
+  ADR-0008 **accepted**; `ecoUrl` promoted beside `eco` (B-102 decision 3); `whiteAccuracy` /
+  `blackAccuracy` added (B-104). All three are in `src/model/game.ts` and the mock data, so the
+  schema at B-011 inherits them by construction rather than by someone remembering.
+- **`.gitignore` gained `.fuse_hidden*`.** The AI sandbox reaches this folder over a mount that
+  cannot unlink an open file, so in-place edits orphan the original inode. Harmless, but this repo is
+  public and a blind `git add` would commit it. This is the third distinct symptom of the same
+  sandbox limitation, after the `index.lock` problem and `vite build` failing to empty `dist/`.
 - **B-049 closed as ADR-0008 — the PGN import fidelity policy**, the last thing standing in
   front of B-007. **Raised B-097 – B-102.** Written up under "Decided" below, because the
   reasoning matters more than the outcome.
@@ -519,8 +534,14 @@ Session 1:
 
 ## Open decisions
 
-- **B-049 — closed as ADR-0008, status `proposed` and awaiting your acceptance.** See the
-  session-4 write-up above for the substance. Nothing now blocks B-007.
+- **B-049 — closed. ADR-0008 is `accepted`** (session 4), after one substantive owner challenge
+  that changed it for the better. Nothing blocks B-007.
+- **B-103 — the one decision deliberately left as a guess.** The owner approved guessing chess.com's
+  draw vocabulary rather than waiting for evidence, which is sound because `result` is derived and a
+  wrong mapping costs a re-import. **The condition is what matters: derive the winner positively and
+  never infer a draw by default.** One side reading `win` means that side won; anything unrecognised
+  must warn and leave `result` null. That way the guess self-corrects on the first real drawn game
+  instead of silently misreporting scores.
 - **B-006 — Engine process management & UCI transport.** Escalates to a platform-surface
   commitment only if an engine binary is bundled. Not triggered by M1. The B-048 spike already
   demonstrated the transport half working (spawn, stdin/stdout, throttled emit, clean kill with
@@ -604,42 +625,51 @@ Session 1:
 
 ## Next actions
 
+**Nothing is blocked and nothing is half-built.** M1 is closed and verified, ADR-0008 is accepted,
+and the four decisions taken this session are all recorded in the model rather than only in prose.
+The next task is B-099, and it is chosen deliberately over jumping to B-007.
+
+
 **M1 is fully closed and nothing is outstanding from it. B-049 is drafted as ADR-0008.**
 
-1. **Read and accept (or amend) ADR-0008.** It is `proposed`, not `accepted`. The rule worth a
-   second look before it hardens is **rule 6, the duplicate-identity key** — the only rule in the
-   ADR that can lose a game the user expected to see, and a judgement rather than a consequence
-   of something already decided.
-2. **B-101 — run the survey on your real exports. The instrument is built and tested; only the
-   data is missing.** `npm run survey:pgn -- ~/path/to/pgn` (or a directory). It prints counts and
-   shapes with full detail by default, and `--redact` strips names and paths for anything going into
-   the backlog — run it plain first to read it, then `--redact` if you want to paste any of it in.
-   Promoted above the fixture corpus deliberately: it settles the frequency argument
-   with data instead of confidence, and it tells B-099 which fixtures are worth writing.
-   **The number to look at first is same-file content-key collisions**, because that is the only
-   direct evidence about rule 6, the highest-regret rule in ADR-0008. Cross-file collisions are
-   the rule working as intended (overlapping re-exports); same-file collisions are candidate false
-   merges and should be eyeballed individually.
-3. **B-099 — the malformed-PGN fixture corpus, before B-007 rather than after.** ADR-0008 is
+1. **B-099 — the malformed-PGN fixture corpus, before B-007 rather than after.** ADR-0008 is
    seven rules and currently zero evidence; the fixtures are what turn it from a document into
    something that can fail. It is also the cheapest moment: fixtures written against a policy
    test the policy, whereas fixtures written against a finished importer tend to be the ones the
    importer already passes. Same reasoning as the negative control that validated
    `check:i18n` — and the same trap as the session-3 near-miss, where a fixture appeared to
    expose a walker bug and was itself wrong. **Verify the fixture before believing the failure.**
-3. **B-007 — PGN import.** Large tier, so it needs a feature spec via `ai/prompts/feature.md`.
-   Mostly Rust, therefore mostly unverifiable in the AI sandbox — plan for that split explicitly
-   rather than discovering it again.
-4. Then **B-011 — persistence**, where the ADR-0005 migration finally gets written and now also
-   carries ADR-0008's disposition and warning columns; then **B-008 / B-010** — the real table
-   and search, where TanStack arrives and B-033's 200 ms target becomes measurable.
-5. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
+2. **B-007 — PGN import.** Large tier, so it needs a feature spec via `ai/prompts/feature.md`
+   before code. Mostly Rust, therefore mostly unverifiable in the AI sandbox — plan for that split
+   explicitly rather than discovering it again.
+3. Then **B-011 — persistence**, where the ADR-0005 migration finally gets written and now carries
+   four things this session added: ADR-0008's disposition and warning columns, `ecoUrl`, and the
+   two accuracy columns; then **B-008 / B-010** — the real table and search, where TanStack arrives
+   and B-033's 200 ms target becomes measurable.
+4. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
    the B-067 throttling rule across from `tech-stack.md`. The source layout is already recorded
    there, so this file is about component boundaries and data flow rather than directories.
 
-**M1 is closed: the app runs, CI is green on three platforms, and everything is pushed.** The
-project's centre of gravity has moved from deciding to building, and the next thing it needs is
-the import path — the one part of the product that has to survive contact with real files.
+### Waiting on the owner, not on the code
+
+Neither of these blocks anything above; both make later work better-founded.
+
+- **B-101 — point the survey at loose PGN files.** `npm run survey:pgn -- <path>`, plain first to
+  read it, `--redact` for anything pasted into the repo. The chess.com corpus is already measured
+  and recorded, and it is a *clean-source* sample: it told us the tag surface and nothing about the
+  malformed tail, which is what ADR-0008 rules 4 and 5 exist for. **The number to read first is
+  same-file content-key collisions**, the only direct evidence about rule 6 — cross-file collisions
+  are the rule working as intended on overlapping exports, same-file ones are candidate false merges
+  and want eyeballing individually. The downloaded chess.com data sits in `local/pgn/` (untracked).
+- **B-031 — check the GitHub side before treating the repo as safely public.** Visibility,
+  description, topics, the account profile. The session-3 privacy scan covered the repository and
+  cannot see any of that.
+
+**M1 is closed, CI is green on three platforms, and the import path is fully specified but not
+started.** The centre of gravity moved from deciding to building two sessions ago; what changed this
+session is that the decisions in front of B-007 stopped being guesses. Five of them were checked
+against real data and five plausible explanations turned out wrong — which is the reason to keep
+doing it, not a reason to slow down.
 
 ## Notes for the next session
 
@@ -734,6 +764,29 @@ the import path — the one part of the product that has to survive contact with
   selection states and hit areas are structural and expensive to change later. Palettes, board
   and piece theming, and type scale are B-024 and remain deliberately absent. If the app still
   looks plain, that is the intended state, not an oversight.
+- **The AI sandbox cannot delete files, and this now has three distinct symptoms.** `index.lock`
+  left behind by `git status`; `vite build` failing to empty an existing `dist/`; and, new this
+  session, **in-place edits orphaning the original inode as `.fuse_hidden*`** — now covered by
+  `.gitignore`, because the repo is public and a blind `git add` would have committed it. None of
+  these is a code problem and none should be "fixed" in the build config. Run git from a real
+  terminal.
+- **`local/` holds the chess.com download** — 20 monthly JSON archives plus the redundant PGN
+  copies, untracked and covered by `.gitignore`. Safe to delete; re-downloadable in a minute with
+  the command in B-012's note. The `.pgn` files are genuinely redundant now that B-102 established
+  the JSON carries the same games.
+- **A measured fact worth not re-deriving: chess.com's PGN tag set.** `Event, Site, Date, Round,
+  White, Black, Result, CurrentPosition, Timezone, ECO, ECOUrl, UTCDate, UTCTime, WhiteElo,
+  BlackElo, TimeControl, Termination, StartTime, EndDate, EndTime, Link` on every game, plus
+  `SetUp`/`FEN` when the game starts from a position. That covers every ADR-0005 hot field, which
+  is why B-102 decided to derive from tags rather than from JSON.
+- **Five plausible explanations were wrong this session, and all five checks were cheap.** The
+  standing habit that came out of it, now in risk 9: when a symptom has an obvious culprit in our
+  own code, or a plan rests on how often something happens, find the control *first*. The most
+  instructive one was the smallest — four games missing a JSON field all looked like "unrated daily
+  games omit `eco`", and thirteen other unrated daily games had it.
 - **Start the next session with `ai/prompts/session-start.md`.** This file plus `docs/backlog.md`
   should be sufficient — if the next session has to ask something that was settled here, this
   handover failed and is worth fixing rather than working around.
+- **Write this file's header last.** Two consecutive handovers carried a stale "session N is
+  uncommitted" line because the header was written first and went out of date during the session it
+  described.
