@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check:i18n": "node scripts/check-no-literals.mjs",
     "survey:pgn": "node scripts/survey-pgn.mjs"
   },
@@ -30,6 +32,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "typescript": "^5.9.3",
-    "vite": "^8.2.1"
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
   }
 }

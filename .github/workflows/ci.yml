@@ -46,6 +46,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The PGN walker, and the shared fixture corpus in fixtures/ that the Rust importer will
+      # read too. Runs before the build: a failing assertion is a faster signal than a bundle.
+      - name: Test
+        run: npm test
+
       - name: Build frontend
         run: npx vite build
 
@@ -122,3 +127,9 @@ jobs:
 
       - name: Build Tauri app
         run: cargo build --manifest-path src-tauri/Cargo.toml --locked --verbose
+
+      # On all three platforms, not just Linux, unlike fmt and clippy. The Rust suite currently
+      # asserts that fixtures/ is reachable from src-tauri/ — a relative path, which is precisely
+      # the class of thing that behaves differently on Windows (B-069). Cheap to check everywhere.
+      - name: Test
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
