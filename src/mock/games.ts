@@ -57,9 +57,6 @@ export const MOCK_GAMES: readonly Game[] = [
     whiteElo: 2118,
     blackElo: 2074,
     plyCount: 71,
-    // Only the API-shaped row has these: no PGN file carries accuracy figures (B-104).
-    whiteAccuracy: 84.2,
-    blackAccuracy: 71.6,
     tags: {
       Event: "Northern Counties Open",
       Site: "Harrogate",
@@ -94,8 +91,6 @@ export const MOCK_GAMES: readonly Game[] = [
     whiteElo: 2201,
     blackElo: 2118,
     plyCount: 96,
-    whiteAccuracy: null,
-    blackAccuracy: null,
     tags: {
       Event: "Vereinsmeisterschaft",
       Site: "Freiburg",
@@ -122,8 +117,6 @@ export const MOCK_GAMES: readonly Game[] = [
     whiteElo: null,
     blackElo: 1954,
     plyCount: 54,
-    whiteAccuracy: null,
-    blackAccuracy: null,
     tags: {
       Date: "????.??.??",
       White: "Дмитрий Ковалёв",
@@ -148,8 +141,6 @@ export const MOCK_GAMES: readonly Game[] = [
     whiteElo: 2074,
     blackElo: 2201,
     plyCount: 22,
-    whiteAccuracy: null,
-    blackAccuracy: null,
     tags: {
       Event: "Correspondence Section B",
       Site: "ICCF",

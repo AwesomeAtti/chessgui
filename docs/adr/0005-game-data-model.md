@@ -145,3 +145,29 @@ B-012's importer both inherit that.
 
 Display rule: never present these as the application's own assessment. B-019 will compute our own
 accuracy figures and they will disagree with these, so the provenance has to survive into the UI.
+
+### Reversed, session 5 — the fields are removed until B-012 needs them
+
+**Measured: `accuracies` exists only in chess.com's JSON, never as a PGN tag.** Re-checked across all
+25 games in the local archive — every one carries `accuracies` in JSON, and *no* game carries an
+accuracy tag in its PGN. The MVP imports PGN (B-007); JSON import is B-012 and post-MVP. **So these
+two columns could never be populated by anything the MVP does**, and nothing read them: zero
+references outside the model and the mock data.
+
+Removed from `src/model/game.ts` and `src/mock/games.ts`. **B-012 re-adds them together with the
+importer that can fill them**, which is the point at which the reasoning above becomes live rather
+than hypothetical.
+
+Two things get simpler by removing them, and the second is the reason this is worth a note rather
+than a quiet deletion:
+
+- **The model has no exceptions again.** "Store the raw thing, derive the useful thing" held for every
+  field except these two. That exception was real and correctly documented — it just did not need to
+  exist yet.
+- **The retention obligation goes with it.** The paragraph above obliged B-012 to retain source JSON
+  and made a nullable column load-bearing for a derivability condition that session 5 also concluded
+  had been over-formalised (B-078, deferred). Both halves of that entanglement are now deferred to the
+  same point in time, which is where they belong.
+
+The decision itself is unchanged and still correct: **when chess.com JSON import exists, store the
+accuracies.** This is a scheduling correction, not a reversal of the reasoning.
