@@ -144,8 +144,14 @@ Deferring these is the point, not an oversight:
 
 ## Notes
 
-- **The Tauri icon trap.** `src-tauri/icons/icon.png` must exist or the build fails inside a
-  proc macro with an unhelpful error. This bit the B-048 spike; it is pre-empted here.
+- **The Tauri icon trap, twice.** `src-tauri/icons/icon.png` must exist or the build fails
+  inside a proc macro — that one bit the B-048 spike and was pre-empted here. **Windows then
+  turned out to need a second file:** `icons/icon.ico`, or `tauri-build` fails generating the
+  Windows Resource file. macOS and Linux compile happily without it, so **only the CI matrix
+  could have found this**, and it did so on its very first run. That is B-046 earning its cost
+  on day one, and a concrete example of why the untested platforms still have to build.
+  The `.ico` uses BMP entries below 256px and PNG at 256px — Windows only officially supports
+  PNG-compressed entries at 256, and smaller PNG entries are a known compatibility wart.
 - **Board sizing is done in JavaScript, not CSS.** A `ResizeObserver` measures the pane and
   sets pixel dimensions. `aspect-ratio` with container queries would be more elegant, but
   this has to run in three webviews and WebKitGTK is still untested (B-066) — so the boring

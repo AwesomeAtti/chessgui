@@ -479,6 +479,12 @@ decision — it is a window with a chessboard in it.
   work unverified, and say so in the handover each time rather than implying otherwise.
   `src-tauri/icons/icon.png` is now in place, so that particular proc-macro failure is handled;
   macOS Low Power Mode still silently invalidates performance measurements.
+- **CI paid for itself on its first run.** The Windows job failed with `icons/icon.ico not
+  found; required for generating a Windows Resource file` — a second, different icon trap that
+  macOS and Linux do not hit. Nothing on the developer machine could have caught it. This is
+  the concrete argument for B-046 and for keeping the untested platforms compiling (B-068):
+  the divergence was one missing file, found in three minutes, and it would have been found
+  instead by the first Windows tester a year from now.
 - **Mock data uses invented player names on purpose.** Real players would have been easier and
   are exactly the habit that eventually puts a real name in a commit. The fixtures instead carry
   the awkward cases deliberately: accents, Cyrillic, the same person written two ways, a fully
