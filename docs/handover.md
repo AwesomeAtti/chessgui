@@ -3,9 +3,12 @@
 > The current state of the project. Update at the end of every session so the next session
 > (human or AI) can resume with zero chat history.
 
-**Last updated:** 2026-08-16 · **Updated by:** AI (Stage 3 / session 3) · **Kit version:** 0.2.0
-· **Head at session start:** `ec76ee3` · **Session 3 is uncommitted** — see "Notes for the next
-session" for the `.git/index.lock` problem blocking the commit.
+**Last updated:** 2026-08-17 · **Updated by:** AI (Stage 3 / session 4) · **Kit version:** 0.2.0
+· **Head at session start:** `61fe8ed`, clean, and `origin/main` level with it — session 3 was
+committed and pushed in seven increments. **The previous header claimed session 3 was
+uncommitted; that was written before the commits and never corrected.** This is the second
+consecutive handover to carry that same stale sentence, which is worth noticing: the header is
+written first and then goes out of date during the session it describes. Write it last.
 
 ## Project summary
 
@@ -25,16 +28,53 @@ repository. Risk 5 is downgraded but not closed — see the risk register.
 
 ## Active work
 
-**B-054 — M1 skeleton is DONE.** The app runs on macOS with no errors, verified by the owner:
-library table renders, double-click opens a game in a tab, arrow keys step through the moves
-with the move list following, tabs open and close, the window resizes, the Info tab shows the
-retained PGN tags.
+**Nothing is in progress. M1 is fully verified and closed. M2 starts next, at B-049.**
 
-A handful of secondary paths are unticked in `docs/milestones/m1-skeleton.md` — the filter box,
-Enter-to-open, Home/End, click-a-move, Accel+W, the on-screen move buttons. None blocking; a
-couple of minutes to check.
+### Session 4 so far: the M1 verification pass, and what it returned
 
-**The layout took three attempts, and that is the story of this session.**
+**B-054 — M1 skeleton is DONE and now actually observed rather than assumed.** The owner walked
+the eight secondary paths that the previous handover left unticked. Seven passed first time:
+the filter box narrows the table with a live count, arrow keys plus Enter open a game from the
+library, clicking a move jumps the board, two tabs each keep their own ply across a switch,
+Accel+W closes the active tab, the footer move buttons work, and no document-level scrollbar
+appears at any window size.
+
+**The pass was expected to be a formality and returned three findings.** That is the whole
+argument for doing it, and it is the same lesson risk 5 already records in a different costume:
+*deliberation did not catch these and one minute of use did.* All three are written up as
+M1-F1 – M1-F3 in `docs/milestones/m1-skeleton.md`.
+
+- **M1-F1 — `Home`/`End` could not be tested, because the keyboard does not have those keys.**
+  The bindings exist and Apple keyboards without a numpad emit them as fn+←/fn+→, so the code is
+  probably fine. **The finding is not the code, it is that a shortcut nobody can press is not a
+  feature** — and that the binding was inherited from Windows chess software without anyone
+  checking the target keyboard. That is a B-069 portability miss in a category nobody had
+  thought to include in "platform surface": keyboards. Widened **B-086** to own the whole
+  shortcut scheme. **Deliberately not spot-fixed** — the owner's call was to choose all the
+  bindings at once, since piecemeal additions are how a scheme becomes incoherent. Unblocked
+  meanwhile by the ⏮/⏭ footer buttons.
+- **M1-F2 — Accel+W on the library tab closes the window, and it was reported as a bug.**
+  It is better read as an unexamined default. `App.tsx` returns early with no game tab open and
+  does *not* call `preventDefault()`, so the key reaches Tauri's macOS menu where Cmd+W is Close
+  Window. **Examined and kept**: that is the macOS convention, Chrome does the same with its
+  last tab, and nothing can be lost while the MVP is read-only. The early return is now
+  commented at length so nobody "fixes" the asymmetry into a no-op — **including a note that the
+  reasoning expires at B-015**, when unsaved state starts to exist.
+- **M1-F3 — the board lags a live window resize**; everything right of it appears elastic
+  mid-drag, then snaps. Settled layout is correct, so this is repaint timing. Recorded as
+  **B-096**. Two things worth carrying: the reported cause (an elastic panel) was **ruled out by
+  reading the CSS** — the panel is a fixed grid column and cannot stretch; and the actual cause
+  is *still undetermined on purpose*, because per B-077 it needs a control rather than a
+  plausible story. **The control is free and is the next thing to do: drag the window with the
+  library tab active.** No JS sizes anything there, so if the table behaves identically the
+  cause is the webview and there is no work to do.
+
+**One meta-observation worth more than the three findings.** Two of them are the first observed
+costs of trades this project made deliberately and wrote down — JavaScript board sizing over
+CSS (B-069/B-066), and platform conventions behind one boundary. Neither is a surprise; both
+are the documented price arriving. That is the system working, not failing.
+
+### Session 3, kept for context: the layout took three attempts
 
 **The layout took three attempts and the third was chosen properly rather than guessed.**
 Attempt one was two screens with navigation — "felt like a web page". Attempt two was
@@ -71,8 +111,6 @@ fixtures** — a FEN/SetUp header, castling, an unfinished game, and an illegal 
 (truncates rather than throwing). Worth noting one near-miss: a fixture appeared to expose a
 bug in the walker and turned out to be an illegal position I had written myself. Verify the
 fixture before believing the failure.
-
-**Nothing is in progress. M2 starts next.**
 
 ## Decided
 
@@ -241,6 +279,18 @@ The kit is at 0.2.0.
 
 ## Recently completed
 
+Session 4:
+
+- **The M1 verification pass run and the milestone closed honestly.** Seven of eight secondary
+  paths ticked from observation; the eighth is untestable on this keyboard. Three findings
+  (M1-F1 – M1-F3) written up in `docs/milestones/m1-skeleton.md`.
+- **B-096 added** — the live-resize lag, with the control test that decides whether it is real.
+- **B-086 widened** to own the whole keyboard shortcut scheme, with the unreachable-`Home`/`End`
+  finding as its starting evidence.
+- **M1-F2 resolved as a decision rather than a fix** — Cmd+W on the library tab keeps closing
+  the window; the deliberate fall-through is now commented in `App.tsx`, with an expiry note
+  pointing at B-015.
+
 Session 3:
 
 - **First product code in the repository.** Tauri 2 shell (`src-tauri/`, standard lib/bin
@@ -393,9 +443,10 @@ Session 1:
 
 ## Next actions
 
-1. **Tick the remaining M1 boxes** in `docs/milestones/m1-skeleton.md` — five minutes with the
-   app open, and it closes the milestone honestly rather than by assertion. Nothing on that
-   list is expected to fail; it is simply unobserved.
+1. **The B-096 control test — one window drag, with the library tab active.** Do this before
+   anything else, not because it matters much but because it costs nothing and decides whether
+   B-096 is our bug or the webview's. Also still outstanding from the M1 pass: confirm fn+←/fn+→
+   actually reach the Home/End bindings (M1-F1).
 2. **B-049 — PGN import fidelity policy.** The first real M2 task, and the one B-007 cannot
    start without: accept, repair, or reject malformed input, and what happens when a German
    export carries `Sf3` instead of `Nf3` (B-073). Notify-and-proceed, but it must be written

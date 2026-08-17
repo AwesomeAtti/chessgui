@@ -75,6 +75,16 @@ export default function App() {
   // Close the active tab with the platform's own accelerator — Cmd+W on macOS, Ctrl+W
   // elsewhere. Routed through shell/platform.ts rather than reading `metaKey` directly,
   // which is the entire point of B-069: the macOS assumption is made once, in one file.
+  //
+  // **The early return below is deliberate: do not add `preventDefault()` to it.** With no
+  // game tab open there is nothing to close — the library tab is pinned — so the event is
+  // allowed to fall through to the platform, where Cmd+W is Close Window and, in a
+  // single-window app, quits. That is the macOS convention and the same thing Chrome does
+  // with its last tab. It reads like an oversight because the two branches are asymmetric,
+  // and it was reported as a bug once already (M1-F2 in docs/milestones/m1-skeleton.md).
+  // Swallowing the key here would instead break the standard close-window shortcut. This is
+  // only safe while nothing is unsaved, which is true of the read-only MVP (B-050) and stops
+  // being true at B-015 — revisit it there, not before.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "w" || !isAccelPressed(event)) return;

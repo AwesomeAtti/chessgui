@@ -1,6 +1,6 @@
 # Milestone M1: Skeleton
 
-- **Status:** done — the app runs on macOS and the primary paths are verified
+- **Status:** done — the app runs on macOS and every acceptance path is verified by the owner
 - **Target:** reached, session 3
 - **Backlog item:** B-054
 
@@ -130,16 +130,58 @@ Deferring these is the point, not an oversight:
 - [x] SPDX `GPL-3.0-or-later` in both manifests
 - [x] `handover.md` and `backlog.md` updated
 
-**Untested — none blocking, all a couple of minutes next session:**
+**Secondary paths — verified by the owner on macOS, session 4:**
 
-- [ ] The filter box narrows the table and the count updates
-- [ ] Arrow keys move the library selection; Enter opens the highlighted game
-- [ ] Home / End jump to the start and end of a game
-- [ ] Clicking a move in the list jumps the board to it
-- [ ] Switching between two open tabs preserves each game's position
-- [ ] Accel+W closes the active tab, and the library tab has no close control
-- [ ] The on-screen move buttons in the panel footer
-- [ ] No document-level scrollbar at extreme window sizes — this is B-090's territory
+- [x] The filter box narrows the table and the count updates
+- [x] Arrow keys move the library selection; Enter opens the highlighted game
+- [x] Home / End jump to the start and end of a game — via fn+←/fn+→, **see M1-F1**
+- [x] Clicking a move in the list jumps the board to it
+- [x] Switching between two open tabs preserves each game's position
+- [x] Accel+W closes the active tab, and the library tab has no close control —
+      **with a caveat, see M1-F2**
+- [x] The on-screen move buttons in the panel footer
+- [x] No document-level scrollbar at extreme window sizes — **but see M1-F3**
+
+## Findings from the verification pass (session 4)
+
+Seven of eight secondary paths passed first time. The three notes below are what the pass was
+for — none of them was visible from a green build, and none would have been found by anything
+except a person resizing a window and pressing keys.
+
+**M1-F1 — Home/End could not be tested, because the keyboard does not have those keys.**
+The bindings exist (`GameView.tsx` listens for `Home` and `End`) and Apple keyboards without a
+numeric keypad emit them as fn+← and fn+→, so the code is probably correct. That is not the
+interesting part. **The interesting part is that a shortcut nobody can press is not a feature**,
+and this is a portability finding of exactly the B-069 shape: `Home`/`End` is a convention
+inherited from Windows chess software, and it was adopted without anyone checking that the
+target keyboard has the keys. Folded into **B-086**, which already owns the discoverable
+shortcut reference. Decision taken: **bindings get chosen as one coherent scheme, not
+spot-fixed one key at a time**, because piecemeal additions are how inconsistent schemes
+happen. The ⏮/⏭ footer buttons already make the function reachable, so nothing is blocked.
+
+**M1-F2 — Accel+W on the library tab closes the window, and that is now a deliberate choice
+rather than an accident.** `App.tsx` returns early when no game tab is active *without*
+calling `preventDefault()`, so the event reaches Tauri's default macOS menu, where Cmd+W is
+Close Window — which in a single-window application quits. It was reported as a bug and it is
+better read as an unexamined default: **macOS convention genuinely is that Cmd+W closes the
+window, and Chrome closes its last tab and the window with the same key.** Owner chose to keep
+the behaviour. Nothing is lost when it happens (read-only MVP, no unsaved state), which is what
+makes it cheap to leave. The early return is now commented so it does not get "fixed" into a
+no-op by a future reader who sees only the asymmetry.
+
+**M1-F3 — during a live window resize, everything right of the board appears to stretch and
+then snap back.** No scrollbars appear and the settled layout is correct, so this is a
+repaint-timing artefact rather than a layout bug. **The panel is not what moves**: `.game-view`
+declares `grid-template-columns: minmax(0, 1fr) var(--panel-w)`, so its width is pure CSS and
+cannot be elastic. What can lag is the board, whose pixel size is set from JavaScript by the
+`ResizeObserver` in `useChessground.ts` — during a continuous drag the container has already
+grown while the board still holds its previous size, and the changing gap reads as drift.
+Whether the cause is that observer or macOS compositing a stretched copy of the last painted
+frame is **not yet established, and was not guessed at**: per B-077 the way to tell is a
+control, and there is a free one — the library tab has no JS-sized element, so if the table
+stretches and snaps in the same way, the cause is the webview and not our code. Recorded as
+**B-096** with that test attached. This is the predicted cost of the deliberate
+JavaScript-over-CSS sizing trade in the notes below, showing up for the first time.
 
 **CI is green on all three platforms**, plus formatting and lints, as of run `31982066850`.
 It took three runs: the first found a Windows-only missing `icon.ico`, the second confirmed the
