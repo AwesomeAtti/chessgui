@@ -144,20 +144,21 @@ Deferring these is the point, not an oversight:
 
 ## Findings from the verification pass (session 4)
 
-Seven of eight secondary paths passed first time. The three notes below are what the pass was
-for — none of them was visible from a green build, and none would have been found by anything
-except a person resizing a window and pressing keys.
+**All eight paths pass. Every finding below came from a path that passed** — which is the
+point worth keeping: a tick is not the same as an absence of information, and none of these
+three was visible from a green build.
 
-**M1-F1 — Home/End could not be tested, because the keyboard does not have those keys.**
-The bindings exist (`GameView.tsx` listens for `Home` and `End`) and Apple keyboards without a
-numeric keypad emit them as fn+← and fn+→, so the code is probably correct. That is not the
-interesting part. **The interesting part is that a shortcut nobody can press is not a feature**,
-and this is a portability finding of exactly the B-069 shape: `Home`/`End` is a convention
-inherited from Windows chess software, and it was adopted without anyone checking that the
-target keyboard has the keys. Folded into **B-086**, which already owns the discoverable
-shortcut reference. Decision taken: **bindings get chosen as one coherent scheme, not
-spot-fixed one key at a time**, because piecemeal additions are how inconsistent schemes
-happen. The ⏮/⏭ footer buttons already make the function reachable, so nothing is blocked.
+**M1-F1 — Home/End work, and are still effectively unavailable.** The bindings are correct
+(`GameView.tsx` listens for `Home` and `End`) and were confirmed via **fn+← and fn+→**, which is
+how Apple keyboards without a numeric keypad emit those keys. So there is no bug. **The finding
+is that the keyboard in front of the developer has no key with either label on it**, so the
+shortcut is undiscoverable and, to anyone who does not already know the fn convention, absent.
+`Home`/`End` is a convention inherited from Windows chess software and it was adopted without
+anyone checking the target keyboard — a B-069 portability miss in a category nobody had thought
+to file under "platform surface": keyboards. Folded into **B-086**, which already owns the
+discoverable shortcut reference. Decision taken: **bindings get chosen as one coherent scheme,
+not spot-fixed one key at a time**, because piecemeal additions are how a scheme becomes
+incoherent. Nothing is blocked meanwhile — the ⏮/⏭ footer buttons reach the same function.
 
 **M1-F2 — Accel+W on the library tab closes the window, and that is now a deliberate choice
 rather than an accident.** `App.tsx` returns early when no game tab is active *without*
@@ -169,19 +170,29 @@ the behaviour. Nothing is lost when it happens (read-only MVP, no unsaved state)
 makes it cheap to leave. The early return is now commented so it does not get "fixed" into a
 no-op by a future reader who sees only the asymmetry.
 
-**M1-F3 — during a live window resize, everything right of the board appears to stretch and
-then snap back.** No scrollbars appear and the settled layout is correct, so this is a
-repaint-timing artefact rather than a layout bug. **The panel is not what moves**: `.game-view`
-declares `grid-template-columns: minmax(0, 1fr) var(--panel-w)`, so its width is pure CSS and
-cannot be elastic. What can lag is the board, whose pixel size is set from JavaScript by the
-`ResizeObserver` in `useChessground.ts` — during a continuous drag the container has already
-grown while the board still holds its previous size, and the changing gap reads as drift.
-Whether the cause is that observer or macOS compositing a stretched copy of the last painted
-frame is **not yet established, and was not guessed at**: per B-077 the way to tell is a
-control, and there is a free one — the library tab has no JS-sized element, so if the table
-stretches and snaps in the same way, the cause is the webview and not our code. Recorded as
-**B-096** with that test attached. This is the predicted cost of the deliberate
-JavaScript-over-CSS sizing trade in the notes below, showing up for the first time.
+**M1-F3 — the live-resize stretch is the webview's, not ours. Closed by a control, in one
+window drag.** During a resize, everything right of the board appears to stretch elastically and
+snap back when the drag stops. No scrollbars appear and the settled layout is correct, so it was
+never a layout bug — the question was only whose repaint it is.
+
+Two candidate causes, and the reported one was **ruled out by reading the CSS**: the side panel
+cannot be what moves, because `.game-view` declares
+`grid-template-columns: minmax(0, 1fr) var(--panel-w)` and its width is therefore pure CSS. That
+left the board, whose pixel size is set from JavaScript by the `ResizeObserver` in
+`useChessground.ts`, against macOS simply compositing a stretched copy of the last painted frame
+during live resize.
+
+**Rather than pick the plausible story, we ran the control** — per B-077, which exists because
+this project has already been burned once by a measurement with nothing to compare against. The
+library tab contains no JavaScript-sized element at all. It stretches and snaps identically.
+**So the cause is the webview's live-resize compositing and none of our code is involved**, and
+`useChessground.ts` is exonerated rather than merely unaccused. **B-096 rejected on that
+evidence.**
+
+Worth keeping for its shape as much as its result: the control cost one window drag, it was
+available for free the whole time, and it turned a suspicion about our own architecture into a
+closed question. The JavaScript-over-CSS sizing trade (B-069) was the obvious suspect and was
+innocent — which is exactly the situation where a cheap control beats a confident diagnosis.
 
 **CI is green on all three platforms**, plus formatting and lints, as of run `31982066850`.
 It took three runs: the first found a Windows-only missing `icon.ico`, the second confirmed the

@@ -32,47 +32,57 @@ repository. Risk 5 is downgraded but not closed — see the risk register.
 
 ### Session 4 so far: the M1 verification pass, and what it returned
 
-**B-054 — M1 skeleton is DONE and now actually observed rather than assumed.** The owner walked
-the eight secondary paths that the previous handover left unticked. Seven passed first time:
-the filter box narrows the table with a live count, arrow keys plus Enter open a game from the
-library, clicking a move jumps the board, two tabs each keep their own ply across a switch,
-Accel+W closes the active tab, the footer move buttons work, and no document-level scrollbar
-appears at any window size.
+**B-054 — M1 skeleton is DONE and now observed rather than assumed.** The owner walked the eight
+secondary paths the previous handover left unticked, and **all eight pass**: the filter box
+narrows the table with a live count, arrow keys plus Enter open a game from the library, Home/End
+jump to either end of a game, clicking a move jumps the board, two tabs each keep their own ply
+across a switch, Accel+W closes the active tab, the footer move buttons work, and no
+document-level scrollbar appears at any window size.
 
-**The pass was expected to be a formality and returned three findings.** That is the whole
-argument for doing it, and it is the same lesson risk 5 already records in a different costume:
-*deliberation did not catch these and one minute of use did.* All three are written up as
-M1-F1 – M1-F3 in `docs/milestones/m1-skeleton.md`.
+**Every box was expected to pass. Every box passed. The pass still returned three findings.**
+That is the sentence to keep: *a tick is not the same as an absence of information*, and nothing
+here was visible from a green build. Written up as M1-F1 – M1-F3 in
+`docs/milestones/m1-skeleton.md`.
 
-- **M1-F1 — `Home`/`End` could not be tested, because the keyboard does not have those keys.**
-  The bindings exist and Apple keyboards without a numpad emit them as fn+←/fn+→, so the code is
-  probably fine. **The finding is not the code, it is that a shortcut nobody can press is not a
-  feature** — and that the binding was inherited from Windows chess software without anyone
-  checking the target keyboard. That is a B-069 portability miss in a category nobody had
-  thought to include in "platform surface": keyboards. Widened **B-086** to own the whole
-  shortcut scheme. **Deliberately not spot-fixed** — the owner's call was to choose all the
-  bindings at once, since piecemeal additions are how a scheme becomes incoherent. Unblocked
-  meanwhile by the ⏮/⏭ footer buttons.
+- **M1-F1 — Home/End work, and are still effectively unavailable.** Confirmed via **fn+←/fn+→**,
+  which is how Apple keyboards without a numpad emit those keys. So there is no bug. **The
+  finding is that no key on the keyboard in front of the developer carries either label**, so a
+  working shortcut is reachable only by someone who already knows the fn convention. The binding
+  was inherited from Windows chess software without anyone checking the target keyboard — a
+  B-069 portability miss in a category nobody had thought to file under "platform surface":
+  keyboards. Widened **B-086** to own the whole shortcut scheme. **Deliberately not spot-fixed**
+  — the owner's call was to choose all the bindings at once, since piecemeal additions are how a
+  scheme becomes incoherent. Reachable meanwhile via the ⏮/⏭ footer buttons.
 - **M1-F2 — Accel+W on the library tab closes the window, and it was reported as a bug.**
-  It is better read as an unexamined default. `App.tsx` returns early with no game tab open and
-  does *not* call `preventDefault()`, so the key reaches Tauri's macOS menu where Cmd+W is Close
-  Window. **Examined and kept**: that is the macOS convention, Chrome does the same with its
-  last tab, and nothing can be lost while the MVP is read-only. The early return is now
-  commented at length so nobody "fixes" the asymmetry into a no-op — **including a note that the
-  reasoning expires at B-015**, when unsaved state starts to exist.
-- **M1-F3 — the board lags a live window resize**; everything right of it appears elastic
-  mid-drag, then snaps. Settled layout is correct, so this is repaint timing. Recorded as
-  **B-096**. Two things worth carrying: the reported cause (an elastic panel) was **ruled out by
-  reading the CSS** — the panel is a fixed grid column and cannot stretch; and the actual cause
-  is *still undetermined on purpose*, because per B-077 it needs a control rather than a
-  plausible story. **The control is free and is the next thing to do: drag the window with the
-  library tab active.** No JS sizes anything there, so if the table behaves identically the
-  cause is the webview and there is no work to do.
+  Better read as an unexamined default. `App.tsx` returns early with no game tab open and does
+  *not* call `preventDefault()`, so the key reaches Tauri's macOS menu where Cmd+W is Close
+  Window. **Examined and kept**: that is the macOS convention, Chrome does the same with its last
+  tab, and nothing can be lost while the MVP is read-only. The early return is now commented at
+  length so nobody "fixes" the asymmetry into a no-op — **including a note that the reasoning
+  expires at B-015**, when unsaved state starts to exist.
+- **M1-F3 — the live-resize stretch turned out to be the webview's, not ours, and a control is
+  what established that.** Everything right of the board appears elastic mid-drag, then snaps;
+  settled layout correct, so repaint timing. The reported cause was **ruled out by reading the
+  CSS** — the panel is a fixed grid column and cannot stretch. That left our JavaScript board
+  sizing versus macOS compositing the last painted frame. **Rather than pick the plausible story,
+  we ran the control** (B-077): the library tab has no JavaScript-sized element and stretches
+  identically. So no code of ours participates and `useChessground.ts` is exonerated rather than
+  merely unaccused. **B-096 rejected.** Cost: one window drag.
 
-**One meta-observation worth more than the three findings.** Two of them are the first observed
-costs of trades this project made deliberately and wrote down — JavaScript board sizing over
-CSS (B-069/B-066), and platform conventions behind one boundary. Neither is a surprise; both
-are the documented price arriving. That is the system working, not failing.
+**Two meta-observations, and the second matters more.**
+
+First, these are the first observed costs of trades this project made deliberately and wrote
+down — JavaScript board sizing over CSS (B-069/B-066), and platform conventions behind one
+boundary. Neither is a surprise; both are the documented price arriving.
+
+Second, and this is the one to carry: **the obvious suspect was innocent.** `useChessground.ts`
+is the most complicated, most hand-rolled, most apologised-for piece of code in the frontend, so
+when a resize glitch appeared it was the natural culprit — and it had nothing to do with it. The
+control that proved so was free, available from the moment the symptom was described, and would
+not have been run at all if the confident diagnosis had been allowed to stand. **This is the
+third time on this project that measurement has overturned reasoning** (risk 9's IPC flood,
+risk 10's Low Power Mode, now this), and the pattern in all three is the same: the story was
+coherent, plausible, and wrong.
 
 ### Session 3, kept for context: the layout took three attempts
 
@@ -281,15 +291,20 @@ The kit is at 0.2.0.
 
 Session 4:
 
-- **The M1 verification pass run and the milestone closed honestly.** Seven of eight secondary
-  paths ticked from observation; the eighth is untestable on this keyboard. Three findings
-  (M1-F1 – M1-F3) written up in `docs/milestones/m1-skeleton.md`.
-- **B-096 added** — the live-resize lag, with the control test that decides whether it is real.
-- **B-086 widened** to own the whole keyboard shortcut scheme, with the unreachable-`Home`/`End`
-  finding as its starting evidence.
+- **The M1 verification pass run, all eight secondary paths ticked from observation, and the
+  milestone closed honestly rather than by assertion.** Three findings (M1-F1 – M1-F3) written
+  up in `docs/milestones/m1-skeleton.md` — **all three from paths that passed.**
+- **B-096 raised and rejected in the same session, on evidence.** The live-resize stretch was
+  chased with a control (the library tab, which has no JavaScript-sized element) and turned out
+  to be the webview's, exonerating `useChessground.ts`. The note is kept because the method is
+  the reusable part.
+- **B-086 widened** to own the whole keyboard shortcut scheme, with the `Home`/`End`
+  discoverability finding as its starting evidence. Bindings deliberately not spot-fixed.
 - **M1-F2 resolved as a decision rather than a fix** — Cmd+W on the library tab keeps closing
   the window; the deliberate fall-through is now commented in `App.tsx`, with an expiry note
   pointing at B-015.
+- **Risk 9 updated**: measurement has now overturned reasoning three times, and the rule was
+  written down rather than left as three anecdotes.
 
 Session 3:
 
@@ -436,6 +451,16 @@ Session 1:
    general: this project's risk register is built from reasoning rather than measurement, and
    the one item that got measured turned out to be misjudged. Worth remembering before treating
    any other entry on this list as sized.
+
+    **Updated session 4 — this is now a pattern of three, not an anecdote.** The IPC flood was
+    over-sized (risk 9), a benchmark nearly returned a false negative (risk 10), and the
+    live-resize glitch was confidently attributed to the most complicated code in the frontend
+    and turned out to belong to the webview (M1-F3, B-096). Every one of those explanations was
+    coherent and plausible before it was checked. **In all three, the check was cheap** — a
+    plain-browser control, a recorded power state, one window drag on a different tab. The
+    working rule that falls out: when a symptom has an obvious culprit in our own code, find the
+    control *first*, because the cost of running one is minutes and the cost of acting on a
+    plausible story is rework plus a false belief that outlives it.
 10. **A benchmark nearly produced a false negative against ADR-0001.** macOS Low Power Mode
     capped the machine to 30 fps on mains power, and the first spike run looked like a failure.
     A plain-browser control on the same machine is what caught it (B-077). Any future
@@ -443,11 +468,9 @@ Session 1:
 
 ## Next actions
 
-1. **The B-096 control test — one window drag, with the library tab active.** Do this before
-   anything else, not because it matters much but because it costs nothing and decides whether
-   B-096 is our bug or the webview's. Also still outstanding from the M1 pass: confirm fn+←/fn+→
-   actually reach the Home/End bindings (M1-F1).
-2. **B-049 — PGN import fidelity policy.** The first real M2 task, and the one B-007 cannot
+**M1 is fully closed and nothing is outstanding from it.** The next action is the first M2 task.
+
+1. **B-049 — PGN import fidelity policy.** The first real M2 task, and the one B-007 cannot
    start without: accept, repair, or reject malformed input, and what happens when a German
    export carries `Sf3` instead of `Nf3` (B-073). Notify-and-proceed, but it must be written
    down before any import code exists.
