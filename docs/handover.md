@@ -5,20 +5,33 @@
 
 **Last updated:** 2026-08-17 · **Updated by:** AI (Stage 3 / session 5) · **Kit version:** 0.2.0
 
-**Head at session start:** `760dcc9`, `origin/main` level with it — **session 4's commits were all
-pushed after all**, so the warning that stood here ("three of those commits were still unpushed")
-was itself the stale-header failure it was written to prevent. Checked with
-`git --no-optional-locks log origin/main..HEAD`, which returned nothing. Session 5's work is
-uncommitted at the time of writing; see "Session 5" under Recently completed for what it contains
-and the one local command it needs.
+**Head at session start:** `760dcc9`, clean, level with `origin/main`. **Session 5 is committed and
+pushed in eight increments** — `620b4b7`, `a10a18d`, `f058ba4`, `8ffbf4a`, `d3c7f18`, `255baa6`,
+`6206d42`, `72b7d12`. `origin/main` is at `72b7d12`; `git log origin/main..HEAD` is empty and the tree
+is clean. Verified at close rather than predicted, because this header has carried a stale claim in
+three consecutive sessions and did again mid-session: it said "session 5's work is uncommitted", which
+was true when written and false an hour later.
 
-Written after the work, not before — the two previous handovers both carried a stale
-"uncommitted" claim in this position because the header went out of date during the session it
-described.
+**Written last, deliberately.** That is the rule this file keeps breaking, so here it is as a
+procedure rather than an intention: **write the header after the final push, from `git log`, not from
+memory.**
 
-**State in one line:** M1 closed and owner-verified, the project now has a test harness and a PGN
-fixture corpus, and **import policy is ADR-0009 — strict, four rules, ADR-0008 superseded**. Next task
-is **B-007 milestone 1**, a measurement with no product code.
+**State in one line:** M1 closed and owner-verified; the project now has a test harness, an 18-fixture
+PGN corpus, and a settled import policy in **ADR-0009 — the libraries validate, we add nothing**. The
+import path is started: **B-007 milestone 1 is measured and done**. Next is milestone 2.
+
+**Session 5 in a paragraph, for anyone who does not want the detail below.** It began as a state
+review that recommended B-099 — and B-099 turned out not to be startable, because the project had no
+test runner at all, which no document revealed. So the session built the harness (B-106), then the
+corpus (B-099), and the corpus then changed the governing policy twice: ADR-0008's rule 3b was amended
+(B-113), then ADR-0008 was superseded wholesale by **ADR-0009** (B-114) after the owner rejected it as
+disproportionate. Four owner challenges did the real work, each cutting deeper than the concession
+would have: the dedupe hash was solving a problem the MVP does not have; dependency behaviour is not
+ours to second-guess; derivability was a production doctrine in a development-stage app; and *"if
+pgn-reader doesn't validate, why do we need to?"* removed positions, FEN handling, variant selection
+and an entire direct dependency from the importer. Net effect: **B-007 shrank from six milestones to
+four, one backlog item was rejected, three were deferred, and two model columns were removed** — while
+the MVP got closer rather than further away.
 
 ## Project summary
 
@@ -360,6 +373,32 @@ Session 5:
   decision twice in one session** (rule 3b, then the whole policy) and survived both, because a file
   that must be *rejected* is exactly as useful a fixture as a file to be repaired. The rule-coverage
   test earned its keep immediately by failing the moment seven rules became four.
+- **B-007 milestone 1 done — the measurement, and it is the most valuable thing in the session.**
+  `src-tauri/tests/pgn_reader_probe.rs` ran `pgn-reader` over all eighteen fixtures. Results now in
+  `expected.json` as `importOutcome`/`importTags`/`importTokens`, alongside the chessops numbers.
+  **`pgn-reader` refuses exactly one of eighteen** — `unterminated-comment` — so the import-error set
+  is nearly empty, as ADR-0009 suspected but could not claim.
+  **The headline finding: the two libraries produce two *different* wrong games from the same
+  non-English file, and neither says anything.** For `e4 e5 Sf3 Sc6 Lb5 a6`, `pgn-reader` **drops** the
+  tokens it cannot parse (`e4 e5 a6`, so black's `a6` becomes white's third move) while `chessops`
+  **rewrites** them (`Sf3` → the legal pawn move `f3`, giving `e4 e5 f3 c6`). Owner's decision: assume
+  English SAN, record it as a known issue, fix the error handling in a later release — **B-115**.
+  **Three "accepted risks" I had written down turned out to be chessops limitations rather than general
+  ones.** `pgn-reader` reports two tags where two exist, all nine when three are duplicated, and zero
+  for binary garbage; chessops fabricates seven defaults and collapses duplicates. So "telling them
+  apart needs byte inspection we are not doing" was false of the side that actually stores data. One
+  risk-table row is **retired**, and duplicate tags turn out not to be a validation question at all —
+  the parser hands back both, so the importer must *choose*, which is a decision to document.
+  **One consequence the MVP will visibly ship:** `illegal-move-midgame` yields 9 tokens at import and
+  truncates at 6 on display, so the library table will say nine plies while the board stops at six.
+  Accepted — making them agree means a legality walk over every import.
+- **The probe needed two runs, and the reason is worth keeping.** The first printed a token *count*
+  when the lists differed, which fired on exactly the two fixtures the measurement existed to
+  explain — so it answered nothing. **An instrument that summarises where you needed the raw data is
+  worse than no instrument, because it looks like an answer.** Second version prints both token lists
+  and lets a human judge. It also had two false-positive sources: a raw scan that counted clock-comment
+  fragments as moves, and a `Display` round-trip that reports `P@e4` → `@e4`, which is formatting
+  rather than parsing.
 - **B-007's spec rewritten against ADR-0009 and cut from six milestones to four.** Milestone 1 is
   unchanged and still the important one: measure whether `pgn-reader` alters tokens the way chessops
   does, because if it does, strictness needs an explicit check rather than a trusting one — the parser
@@ -818,8 +857,10 @@ Session 1:
     plan rests on how often something happens, find the control *first*, because the cost of
     running one is minutes and the cost of acting on a plausible story is rework plus a false
     belief that outlives it.
-    **Updated session 5 — this is now six, and the sixth is the first one found inside an accepted
-    ADR.** B-099's fixtures measured ADR-0008 rule 3b's premise and it is false: chessops honours the
+    **Updated session 5 — this is now seven, and two of them are new in kind.** The *sixth* was the
+    first found inside an *accepted ADR*; the *seventh* is the first where the wrong reasoning was
+    about **a dependency's behaviour** rather than our own code, and where two libraries turned out to
+    fail differently from each other rather than one of them failing. Details below. B-099's fixtures measured ADR-0008 rule 3b's premise and it is false: chessops honours the
     `Variant` tag, so a variant game does not produce the "illegal move at ply 2" misdiagnosis the
     rule was written to prevent. Two things make this the most instructive instance yet. First, the
     rule's *instinct* was right and its *example* was wrong, so a reader checking the conclusion
@@ -843,64 +884,35 @@ Session 1:
 
 ## Next actions
 
-**Nothing is blocked and nothing is half-built.** M1 is closed and verified, ADR-0008 is accepted,
-and there is now a harness that ADR-0008 can be tested against. The next task is B-099, and it is
-still chosen deliberately over jumping to B-007.
+**Nothing is blocked and nothing is half-built.** Everything session 5 touched is committed, pushed,
+and green on every gate CI applies — `npm test` (32), `typecheck`, `check:i18n`, `vite build`,
+`cargo fmt`, `cargo clippy --all-targets -D warnings`, `cargo test`. No claim below rests on "should
+work", and nothing in this session had a visual acceptance criterion, because none of it touched UI.
 
-**The Rust half was run in a real terminal and is fully green**, closing the one thing session 5
-could not verify itself: `cargo fmt` reformatted a single statement, `cargo test` reports
-`fixtures_contract.rs` passing, and `cargo clippy --all-targets -- -D warnings` is clean.
-**`Cargo.lock` did not move**, because `serde_json` was already in the graph, so the new
-`[dev-dependencies]` entry costs nothing and `--locked` still holds. **Every gate CI applies has
-therefore been run locally** — fmt, clippy, cargo test, typecheck, guardrails, frontend build and
-`npm test` — so session 5 is committable with nothing left on "should work". The only claim in it
-that a human has not personally checked is a visual one, and there are none: this session touched
-no UI. **The Rust suite was re-run after B-099 grew the corpus from two fixtures to eighteen and
-still passes — and the way it passed is itself worth recording.** It reported the same single green
-test as before, because its only structural assertion was that the manifest is *non-empty*: it would
-have said exactly that whether it read two entries or eighteen. A test that cannot tell a 9×
-change in its own input is a green light with no information in it, which is the failure this
-project keeps meeting in new costumes. Strengthened to assert the manifest count equals the number
-of `.pgn` files on disk, mirroring the TypeScript assertion, so a fixture added to the directory and
-never listed — read by nothing, asserted by nothing — now fails. **Needs one more `cargo fmt` and
-`cargo test` pass**, since the AI cannot run either.
+1. **B-007 milestone 2 — the pure import module.** `src-tauri/src/import/`: PGN text in, `Game` values
+   plus whatever `pgn-reader` refused out. Hot fields from tags per ADR-0005, `result` as an integer,
+   `PgnDate` raw plus parsed, full tag map retained, verbatim PGN byte-preserved, `plyCount` from a
+   token count, UTF-8 with a Latin-1 fallback. **No positions, no FEN handling, no legality walk** —
+   that is ADR-0009, and milestone 1 measured what it costs.
+   **The one thing to measure rather than assume:** which `Result` `pgn-reader` reports when the tag
+   and the termination marker disagree. The milestone-1 probe printed tag *names* only, so this is
+   genuinely open. `Visitor::outcome()` reports the marker separately from `tag()`, so the importer
+   will have both and must choose — prefer the tag, and prefer agreeing with chessops if they conflict,
+   but *look first*.
+   Then assert the measured numbers in `expected.json` (`importOutcome`, `importTags`, `importTokens`)
+   from the Rust side, which is what turns that manifest from a record into a guard.
+2. **B-007 milestone 3 — IPC and the paste path**, then **milestone 4 — file import**. Milestone 3 is
+   the first point at which a human must look, and the first honest measurement of how long 3,000
+   games takes.
+3. **B-011 — persistence.** The ADR-0005 migration, now smaller than it was a session ago: no
+   disposition or warning columns, no content key, no accuracy columns.
+4. **B-008 / B-010** — the real table and search, where TanStack arrives and B-033's 200 ms target
+   becomes measurable. Then **`docs/architecture.md`**, the remaining half of B-055.
 
-1. **B-007 milestone 1 — written, needs one run.** `src-tauri/tests/pgn_reader_probe.rs` plus
-   `pgn-reader = "0.29"` in `Cargo.toml`. It prints what `pgn-reader` does with all eighteen fixtures
-   and **asserts nothing about behaviour on purpose** — asserting before a human has read the output
-   is how a test ends up certifying a bug. The question it answers: does the Rust tokenizer rewrite
-   `Sf3` to `f3` the way chessops does, and what if anything does it refuse outright?
-   **`Cargo.lock` will change** — shakmaty was added and then removed as a direct dependency in the
-   same session. Commit it.
-   ```
-   cargo fmt --manifest-path src-tauri/Cargo.toml
-   cargo test --manifest-path src-tauri/Cargo.toml --test pgn_reader_probe -- --nocapture
-   ```
-2. **B-007 — the rest. The spec is written and awaiting approval:
-   `docs/feature-specs/b007-pgn-import.md`.** Everything in front of it is closed — ADR-0008 accepted
-   *and* amended, corpus in place, and the two rules most likely to have been implemented wrongly
-   corrected before any code existed. Two scope calls to agree or reject: **paste before file**, since
-   a dialog is a platform surface (B-069) and paste needs none; and **no database**, with B-011
-   persisting what import produces, which keeps SQLite and player identity out of an already-large
-   feature. **Milestone 1 is a measurement with no product code**, because `pgn-reader`'s tokenizer
-   behaviour is unknown and B-099 showed `chessops` silently rewrites `Sf3` to `f3` — whether the
-   Rust side agrees decides how rule 4 is built, and a disagreement is B-064 tested rather than
-   discussed. The Rust/sandbox split is handled rather than lamented: the corpus means one
-   `cargo test` asserts eighteen cases whose expected values were measured before the code.
-3. **B-113 — done (session 5).** ADR-0008's addendum is accepted: rule 3b superseded, rule 6 out of
-   the MVP. Read the addendum before implementing either.
-4. **B-099 — done (session 5).** ADR-0008 went from seven rules and zero evidence to seven rules
-   and eighteen fixtures, of which the three interesting ones contradict it. The reason to do this
-   before B-007 held up exactly as argued: fixtures written against a *policy* test the policy,
-   whereas fixtures written against a finished importer tend to be the ones the importer already
-   passes. Remaining work sits in B-007 (assert `disposition` and `warnings`) and B-098.
-5. Then **B-011 — persistence**, where the ADR-0005 migration finally gets written and now carries
-   four things this session added: ADR-0008's disposition and warning columns, `ecoUrl`, and the
-   two accuracy columns; then **B-008 / B-010** — the real table and search, where TanStack arrives
-   and B-033's 200 ms target becomes measurable.
-6. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
-   the B-067 throttling rule across from `tech-stack.md`. The source layout is already recorded
-   there, so this file is about component boundaries and data flow rather than directories.
+**Read before starting B-007:** `docs/adr/0009-strict-pgn-import.md` — in particular its **Stated
+assumption** (all input is English SAN) and its **Accepted risks** table, which is measured on both
+libraries and is the difference between implementing this policy and re-deriving it. ADR-0008 is kept
+as history; its main body is no longer what we do.
 
 ### Waiting on the owner, not on the code
 
@@ -1064,6 +1076,28 @@ doing it, not a reason to slow down.
   was performed by something that no longer exists, say that too. This is the same species as
   session 4's unmeasured frequency claim: a sentence that reads like evidence and is really a
   memory. Worth backporting to the starter kit (B-088).
+- **Two Rust facts that cost a round trip each to learn, so the next session should not relearn them.**
+  `pgn-reader` **does not validate move legality** — it hands back SAN tokens and legality is the
+  caller's job through `shakmaty`, which is what made ADR-0009's "no legality walk" possible. And
+  `shakmaty`'s variants live behind an **opt-in `variant` cargo feature**: omitting it is a compile
+  error rather than a silent fallback, which is the good failure mode. Neither is a direct dependency
+  today; `pgn-reader` carries shakmaty transitively.
+- **`expected.json` now holds measurements from both libraries, and that is its whole value.** Two
+  earlier versions carried *predicted* importer behaviour (`disposition`/`warnings`, then
+  `outcome`/`errorCode`) and both were wrong as the policy moved. The rule that came out of it:
+  **if a field cannot be filled from a measurement, leave it out until it can.** An empty column is
+  honest; a guessed one gets asserted against and then defended.
+- **An instrument that summarises where you needed raw data is worse than none.** The milestone-1
+  probe's first version printed a token count when the lists differed — precisely on the two fixtures
+  it existed to explain. It looked like an answer. Print the data, let a human judge.
+- **Session 5 was committed and pushed in eight increments.** `620b4b7` harness · `a10a18d` corpus ·
+  `f058ba4` ADR-0008 amendment · `8ffbf4a` contract test strengthened · `d3c7f18` + `255baa6` ADR-0009 ·
+  `6206d42` milestone-1 measurement · `72b7d12` English-SAN assumption. The split keeps each policy
+  reversal separate from the code that followed it, which is what makes `git log` readable as a record
+  of *why* rather than *what*.
+- **Backport the session-5 lessons to the kit (B-088), which now carries eight.** The two newest are
+  (7) "verified against fixtures" is a claim about a moment unless the fixtures are committed, and
+  (8) ask for the test harness at the point the methodology first says "verify before claiming done".
 - **Start the next session with `ai/prompts/session-start.md`.** This file plus `docs/backlog.md`
   should be sufficient — if the next session has to ask something that was settled here, this
   handover failed and is worth fixing rather than working around.

@@ -1,7 +1,7 @@
 # Feature Spec: B-007 — PGN import
 
 - **Backlog ID:** B-007
-- **Status:** draft — awaiting owner approval
+- **Status:** **milestone 1 done** (session 5); milestones 2–4 awaiting approval to start
 - **Owner:** Project owner
 - **Size tier:** **Large**, though smaller with each revision. One new Rust crate and the first IPC
   call carrying real data.
@@ -90,8 +90,9 @@ illegal move any more, because the importer does not look.
       ECO and ply count derived from the tags.
 - [ ] A file of 3,000 games containing 4 the parser refuses imports 2,996 rows and reports 4 errors,
       each identifying its game. **No error causes the other games to be lost.**
-- [ ] `cargo test` passes over all eighteen corpus fixtures, asserting whatever milestone 1
-      measured `pgn-reader` to do with each.
+- [ ] `cargo test` asserts the milestone-1 measurements from the Rust side —
+      `importOutcome`/`importTags`/`importTokens` in `expected.json` — which is what turns that
+      manifest from a record into a guard.
 - [ ] A legal Antichess or Crazyhouse game imports normally — trivially, since the importer never
       consults the rules.
 - [ ] Variant handling is **not** an import concern: `[Variant "Grand Chess"]` and
@@ -120,8 +121,10 @@ illegal move any more, because the importer does not look.
   `pgn-reader` drops tokens it cannot parse; `chessops` rewrites them into different legal moves. So a
   German file yields `plyCount` 3 at import and a four-ply game on the board, and neither side
   complains. Covered by ADR-0009's stated assumption that input is English SAN.
-- **`pgn-reader`'s visitor API is a streaming interface the AI has never compiled**, and it shifts
-  across 0.x releases (B-063). Mitigated by making milestone 1 tiny.
+- **`pgn-reader`'s visitor API was unknown to the AI and is now exercised** — see
+  `src-tauri/tests/pgn_reader_probe.rs` for a working `Visitor` with `Tags`/`Movetext`/`Output` and
+  `ControlFlow`. It compiled on the first try after the crate docs were read rather than guessed. Still
+  shifts across 0.x releases (B-063).
 - **`shakmaty` is deliberately not a direct dependency.** The importer never builds a board, so it
   is not needed; `pgn-reader` carries it transitively. It returns, with its `variant` feature, when
   the position index (B-018/B-042) arrives.
@@ -149,7 +152,7 @@ Each milestone ends with a command the owner runs, because the AI cannot compile
 what makes that workable: one `cargo test` asserts eighteen cases whose expected values were
 measured before the code existed.
 
-**Milestone 1 — measure `pgn-reader` against the corpus. No product code. WRITTEN, awaiting a run.**
+**Milestone 1 — measure `pgn-reader` against the corpus. No product code. DONE (session 5).**
 Delivered as `src-tauri/tests/pgn_reader_probe.rs` plus the two crates in `Cargo.toml`
 (`pgn-reader = "0.29"`).
 **One fact from the crate docs changed the design, and it is the reason this spec shrank again:**
@@ -158,8 +161,11 @@ and legality only happens if the caller asks `shakmaty` to play them. Asking is 
 So the MVP importer does not, and `shakmaty` is not a direct dependency at all.
 The probe **asserts nothing about behaviour, deliberately**: asserting before a human has read the
 output would bake in whatever the library does today, which is how a test ends up certifying a bug.
-It also does not select variants — that is milestone 2 — so the variant fixtures are expected to show
-refusals, and that is not a finding.
+**Results:** one refusal in eighteen (`unterminated-comment`); tokens silently *dropped* on the
+localised-notation fixtures where chessops rewrites them (B-115); tags reported truthfully where
+chessops fabricates defaults. All recorded in `expected.json` and ADR-0009's risk table. It took two
+runs — the first printed a token count where the token lists were needed, on exactly the fixtures that
+mattered.
 Add the crates. A `#[cfg(test)]` test walks every fixture and prints what pgn-reader produces: game
 count, ply count, the first token it refuses, and whether it alters a token instead of refusing it.
 → `cargo test --manifest-path src-tauri/Cargo.toml -- --nocapture`
