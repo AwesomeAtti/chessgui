@@ -21,6 +21,12 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# An integration test in `tests/` can only use the crate's public API plus dev-dependencies, so
+# serde_json is listed twice on purpose. Same version, already in the graph, so it costs no extra
+# build — `tests/fixtures_contract.rs` needs it to read `fixtures/pgn/expected.json`.
+[dev-dependencies]
+serde_json = "1"
+
 [profile.release]
 codegen-units = 1
 lto = true

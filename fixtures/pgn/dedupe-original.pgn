@@ -1,0 +1,14 @@
+[Event "Fixture Club Rapid"]
+[Site "Fixtureville"]
+[Date "2024.05.08"]
+[Round "7"]
+[White "Petrov, Alexei"]
+[Black "Weber, Marlene"]
+[Result "1-0"]
+[TimeControl "600"]
+[Annotator "Fixture"]
+[PlyCount "7"]
+
+1. e4 { [%clk 0:10:00] } e5 { [%clk 0:10:00] } 2. Bc4 { [%clk 0:09:58] }
+Nc6 { [%clk 0:09:57] } 3. Qh5 { [%clk 0:09:55] } Nf6 { [%clk 0:09:50] }
+4. Qxf7# { [%clk 0:09:48] } 1-0
