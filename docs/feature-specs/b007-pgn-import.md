@@ -3,8 +3,8 @@
 - **Backlog ID:** B-007
 - **Status:** draft — awaiting owner approval
 - **Owner:** Project owner
-- **Size tier:** **Large**, but smaller than the first draft of this spec. Two new Rust crates and
-  the first IPC call carrying real data.
+- **Size tier:** **Large**, though smaller with each revision. One new Rust crate and the first IPC
+  call carrying real data.
 - **Governed by:** **ADR-0009 (strict import).** The first draft of this spec was written against
   ADR-0008's permissive, tiered policy and had six milestones; the owner rejected that policy as
   disproportionate and it is now superseded. This version has four.
@@ -28,14 +28,15 @@ From ADR-0009, because everything below is downstream of it:
 2. Nothing is repaired. A rejected game is not stored — **the source file is still on disk**, so
    re-importing is always available.
 3. **The libraries are the validator and we add nothing** — not a spec checker, not a
-   notation-language scan, not a zero-moves guard. An error is what `pgn-reader` or `shakmaty`
-   refuses, and its own error kind is the code.
-4. Variants are selected from the `Variant` tag and walked under those rules, not refused.
+   notation-language scan, not a zero-moves guard. An error is what `pgn-reader` refuses.
+   **The importer does not check legality at all**: `pgn-reader` validates syntax, and asking
+   `shakmaty` to play the moves would be us adding validation. Legality is checked on the display
+   side by `chessops`, for the one game the user opens.
+4. Variants are selected from the `Variant` tag — which in the MVP is entirely `chessops`' job,
+   since the importer builds no position.
 
-**Only 4 of the 18 corpus fixtures are errors**, which is the honest measure of this policy: an
-illegal move, two localised-notation files that fail at a later token, and an unrecognised variant
-name. The other fourteen the libraries accept — several despite not conforming to the PGN spec — and
-ADR-0009's "Accepted risks" table lists what that costs.
+**How many of the 18 fixtures will error at import? Unmeasured, and possibly none.** That is
+milestone 1's question. ADR-0009's "Accepted risks" table lists what the libraries tolerate.
 
 ## What this deletes from the previous plan
 
@@ -52,7 +53,8 @@ Recorded because the shrinkage is the point, and because each of these was alrea
 
 **Paste before file, and no database.**
 
-- A pure Rust module: PGN text in, `Vec<Game>` plus `Vec<ImportError>` out.
+- A pure Rust module: PGN text in, `Vec<Game>` plus whatever `pgn-reader` refused out. Tags,
+  a token count for `plyCount`, the verbatim PGN. **No positions, no FEN handling, no legality.**
 - One Tauri command, `import_pgn_text`.
 - A paste target in the UI; imported games replace `src/mock/games.ts`, which is deleted.
 - Games live **in memory for the process lifetime** — they disappear on restart.
@@ -62,10 +64,10 @@ dialog is a platform surface, B-069, and paste needs none); the polished error r
 progress streaming (B-067, and not until a measurement asks for it); chess.com API import (B-012,
 which reuses this pipeline per B-102).
 
-## The error shape, which is now the load-bearing part
+## The error shape
 
-Under ADR-0008 a vague diagnostic could hide behind a disposition. It cannot here: strictness is only
-as good as the message. Every error carries
+Probably a short section in practice, since milestone 1 may find that `pgn-reader` refuses almost
+nothing. Where an error does occur it carries
 
 - the **file** it came from (once milestone 4 exists) and the **game's index** within it,
 - a stable **code** — never English, per B-072; the frontend composes the wording,
@@ -74,24 +76,28 @@ as good as the message. Every error carries
   all).
 
 "Invalid movetext in game 412" is a worse experience than a silent repair. "Game 412, Ivanov–Petrov
-2019.04.02: `Lb5` is not a legal move at ply 5" is better than either.
+2019.04.02: unterminated comment" is better than either — note that the example cannot be about an
+illegal move any more, because the importer does not look.
 
 ## Acceptance criteria
 
-- [ ] Pasting a multi-game PGN produces one row per conforming game, with players, event, date,
-      round, result, ECO and ply count derived from the tags.
+- [ ] Pasting a multi-game PGN produces one row per game, with players, event, date, round, result,
+      ECO and ply count derived from the tags.
 - [ ] A file of 3,000 games containing 4 the parser refuses imports 2,996 rows and reports 4 errors,
       each identifying its game. **No error causes the other games to be lost.**
-- [ ] `cargo test` passes over all eighteen corpus fixtures, asserting import-or-error and the error
-      code for each.
-- [ ] A legal Antichess or Crazyhouse game imports normally.
-- [ ] `[Variant "Grand Chess"]` is an error, because both libraries refuse it, and its code is
-      distinguishable from a malformed FEN — the libraries' own error kinds carry that distinction.
-      `[Variant "Fischerandom"]`-without-`FEN` **imports as standard chess**, an accepted risk rather
-      than a bug, with a fixture asserting exactly that so nobody "fixes" it into a check we own.
-- [ ] German or French movetext errors at the first token the library will not play. **Note what this
-      does not claim:** the earlier plies have already been silently rewritten (`Sf3` → `f3`), we do
-      not detect that, and a file that reinterpreted cleanly throughout would import as a wrong game.
+- [ ] `cargo test` passes over all eighteen corpus fixtures, asserting whatever milestone 1
+      measured `pgn-reader` to do with each.
+- [ ] A legal Antichess or Crazyhouse game imports normally — trivially, since the importer never
+      consults the rules.
+- [ ] Variant handling is **not** an import concern: `[Variant "Grand Chess"]` and
+      `[Variant "Fischerandom"]`-without-`FEN` both import, and both fail or mislead on the display
+      side instead. Fixtures assert exactly that, so nobody "fixes" it into a check we own.
+- [ ] German or French movetext **imports as a game nobody played, and nothing reports it.** Measured
+      at milestone 1: `pgn-reader` drops the unparseable tokens (`e4 e5 Sf3 Sc6 Lb5 a6` → `e4 e5 a6`)
+      while `chessops` rewrites them (`e4 e5 f3 c6`). **This is the stated assumption, not a bug to
+      fix here:** all input is assumed English SAN, and the known issue is **B-115**, flagged for
+      better error handling in a later release. A test should pin the current behaviour so the
+      later fix has something to change.
 - [ ] Bytes that are only PGN by extension do not crash the importer. They produce **one empty junk
       row**, because the library returns a game with default headers rather than refusing —
       accepted, visible, removable, and asserted by a fixture.
@@ -112,7 +118,9 @@ as good as the message. Every error carries
   a real B-064 finding worth recording.
 - **`pgn-reader`'s visitor API is a streaming interface the AI has never compiled**, and it shifts
   across 0.x releases (B-063). Mitigated by making milestone 1 tiny.
-- **`shakmaty` needs `features = ["variant"]`** — opt-in, and a compile error if omitted.
+- **`shakmaty` is deliberately not a direct dependency.** The importer never builds a board, so it
+  is not needed; `pgn-reader` carries it transitively. It returns, with its `variant` feature, when
+  the position index (B-018/B-042) arrives.
 - **Performance unmeasured** (B-033): a 3,000-game paste crosses IPC as one string. Measure, then
   decide; do not pre-optimise.
 - **Diagnostic quality is now a feature, not a nicety** — see the error shape above.
@@ -129,7 +137,7 @@ as good as the message. Every error carries
 - B-099's corpus, repurposed: a corpus of files that must be **rejected** is as useful as one of
   files to be repaired, and its measured `plies`/`truncatedAtPly` values still describe the frontend
   reader and are unaffected.
-- New crates: `pgn-reader`, `shakmaty` with `features = ["variant"]`. Both GPL-3.0-or-later.
+- One new crate: `pgn-reader = "0.29"`, GPL-3.0-or-later.
 
 ## Implementation plan
 
@@ -137,7 +145,17 @@ Each milestone ends with a command the owner runs, because the AI cannot compile
 what makes that workable: one `cargo test` asserts eighteen cases whose expected values were
 measured before the code existed.
 
-**Milestone 1 — measure `pgn-reader` against the corpus. No product code.**
+**Milestone 1 — measure `pgn-reader` against the corpus. No product code. WRITTEN, awaiting a run.**
+Delivered as `src-tauri/tests/pgn_reader_probe.rs` plus the two crates in `Cargo.toml`
+(`pgn-reader = "0.29"`).
+**One fact from the crate docs changed the design, and it is the reason this spec shrank again:**
+`pgn-reader` states plainly that it **does not validate move legality** — it hands back SAN tokens,
+and legality only happens if the caller asks `shakmaty` to play them. Asking is us adding validation.
+So the MVP importer does not, and `shakmaty` is not a direct dependency at all.
+The probe **asserts nothing about behaviour, deliberately**: asserting before a human has read the
+output would bake in whatever the library does today, which is how a test ends up certifying a bug.
+It also does not select variants — that is milestone 2 — so the variant fixtures are expected to show
+refusals, and that is not a finding.
 Add the crates. A `#[cfg(test)]` test walks every fixture and prints what pgn-reader produces: game
 count, ply count, the first token it refuses, and whether it alters a token instead of refusing it.
 → `cargo test --manifest-path src-tauri/Cargo.toml -- --nocapture`
@@ -146,10 +164,11 @@ chessops observations already in `expected.json`. **This milestone can fail usef
 disagreement is the B-064 divergence risk finally producing a result instead of a paragraph.
 
 **Milestone 2 — the pure import module.**
-`src-tauri/src/import/`: text in, conforming games plus errors out. Hot fields per ADR-0005, `result`
-as an integer, `PgnDate` raw plus parsed, full tag map retained, verbatim PGN byte-preserved.
-Legality walked under the variant named in the tag. UTF-8 with Latin-1 fallback.
-→ `cargo test` asserting import-or-error plus the error code for all eighteen fixtures.
+`src-tauri/src/import/`: text in, games plus errors out. Hot fields per ADR-0005, `result` as an
+integer, `PgnDate` raw plus parsed, full tag map retained, verbatim PGN byte-preserved, `plyCount`
+from a token count. UTF-8 with Latin-1 fallback. **No legality walk and no positions** — that is the
+point of milestone 1 having measured what `pgn-reader` alone refuses.
+→ `cargo test` asserting, for all eighteen fixtures, whatever milestone 1 established.
 
 **Milestone 3 — IPC and the paste path.**
 `import_pgn_text`; `ipc.ts` gains the call and the result types; a paste target; `LibraryView` reads

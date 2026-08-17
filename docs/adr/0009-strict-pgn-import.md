@@ -50,10 +50,10 @@ build a second opinion.
 
 **1. The unit of import is one game, and a game either imports or is reported.**
 No third state, no repair, no warnings tier. A game the libraries accept becomes a row. A game they
-refuse produces an **error** carrying the game's position in the file, the library's own error kind as
-a stable code, and the offending token or offset where one exists. The file is never the unit of failure — this is the one
-part of ADR-0008 kept unchanged, because it costs nothing and a partly-damaged export is the normal
-case.
+refuse produces an **error** carrying the game's position in the file, the library's own error kind
+as a stable code, and the offending token or offset where one exists. The file is never the unit of
+failure — the one part of ADR-0008 kept unchanged, because it costs nothing and a partly-damaged
+export is the normal case.
 
 **2. Nothing is repaired, and nothing needs to be retained to make that safe.**
 The verbatim PGN of *imported* games is still stored, because ADR-0005 makes it the source of truth
@@ -61,10 +61,24 @@ and everything else derived. But a rejected game is not stored at all: **the fil
 still on disk, which is the retention that matters.** The user is told which game in which file
 failed and why, and can fix or re-export it.
 
-**3. The parser is the validator. We do not add one.**
-An error is **whatever `pgn-reader` and `shakmaty` refuse** — a token they cannot parse or play, a
-start position they cannot build. Nothing more. **If the library accepts a game, we import it**, and
-we do not inspect the file afterwards to second-guess that decision.
+**3. The parser is the validator. We do not add one — and the MVP importer does not even check
+legality.**
+An error is **whatever `pgn-reader` refuses**, which is a judgement about syntax. Nothing more. If it
+accepts a game, we import it, and we do not inspect the file afterwards to second-guess that.
+
+**Legality is a separate question, and answering it is optional.** `pgn-reader` states plainly that it
+does not validate moves: it hands back SAN tokens, and legality happens only if we ask `shakmaty` to
+play them into a position. **Asking is us adding validation.** So the MVP importer never builds a
+board — every ADR-0005 hot field comes from tags, `plyCount` is a token count, and `result` comes from
+the tag or the termination marker. Nothing in the MVP needs a position.
+
+**Legality is still checked, in the place where it is free.** `mainline.ts` walks a game with
+`chessops` when the user opens it and truncates at the first illegal move — one game, on demand,
+instead of three thousand at import. A game with a broken move therefore lands in the library and
+visibly stops when opened, which is a better failure than being refused at the door.
+
+Rust gets a board when it genuinely needs one: the position index (B-018/B-042) and engine analysis
+(B-019), both post-MVP. `shakmaty` becomes a direct dependency then, with its `variant` feature.
 
 This is narrower than the first draft of this ADR, which listed conditions — missing required tags,
 duplicate tags, a `Result` disagreeing with the termination marker — that **the libraries accept and
@@ -86,41 +100,72 @@ specification names ISO 8859-1, while every modern exporter emits UTF-8 and decl
 UTF-8, fall back to Latin-1, record which was used. Two lines, and rejecting a Latin-1 file would be
 rejecting a *conforming* one.
 
-**4. Variants are selected, not refused** (carried over from ADR-0008's amended rule 3b).
-Read the `Variant` tag and walk the game under the rules it names; `shakmaty` and `chessops` both
-implement the same eight. A legal Antichess game imports. A variant name neither library
-recognises is an error, because both refuse it.
+**4. Variants are selected, not refused** (carried over from ADR-0008's amended rule 3b) — **and in
+the MVP this is entirely the display side's job.** The importer builds no position, so it has nothing
+to select: `chessops` reads the `Variant` tag itself and walks the game under the right rules, which
+is why a legal Antichess game already displays correctly today. The rule matters for Rust when the
+position index arrives. A legal Antichess game imports; a variant name the reader does not recognise
+fails on the display side rather than at import.
 **`[Variant "Fischerandom"]` with no `FEN` header imports as standard chess and derives a wrong
 mainline** — an earlier draft of this rule called it an error, which would have required us to keep our
 own list of variant names to check against. It is in the risk table instead.
 
-## Accepted risks
+## Stated assumption: PGN input is English SAN
 
-**These are cases where the parser silently returns a game that is not quite the game in the file.**
-Every one is measured (B-099), none is detectable without writing the validator this ADR declines to
-write, and **all of them are accepted deliberately rather than overlooked.** Recorded here so that a
-future session finding one of them in the wild recognises it as a known cost rather than a new bug.
+**Decided (owner, session 5): assume every imported file uses English SAN, and do not attempt to
+detect otherwise.** PGN mandates English SAN, chess.com and lichess emit it, and the alternative is
+the language-detection machinery ADR-0008 rule 4 specified and B-098 rejected.
 
-| What happens | Measured behaviour | Why it is accepted |
-|---|---|---|
-| **An unrecognised piece letter is rewritten, not refused** | `chessops`'s tokenizer turns `Sf3` (German knight) into `f3`, a legal pawn move. A German file therefore imports its first few plies as *different legal moves* before failing on a later token | Detecting it needs a notation-language scan over raw movetext — ADR-0008 rule 4, now rejected (B-098). In practice such a file still fails somewhere, so it errors; a file that happened to reinterpret cleanly throughout would import wrongly and silently. Sources are chess.com and lichess, which emit English SAN |
-| **Duplicate tags resolve first-one-wins** | A game with `[Result "1-0"]` and a later `[Result "0-1"]` imports, keeping the first | Catching it means counting tags ourselves. `pgn-reader` may resolve differently, which would be a real B-064 divergence — **document it, do not police it** |
-| **The termination marker overwrites a contradicting `Result` tag** | Tag says `1-0`, movetext ends `0-1`, `chessops` reports `0-1` | Same reason. The derived `result` column may disagree with the file's own tag, and ADR-0005 makes that a re-import to fix rather than data loss |
-| **Missing roster tags are filled with defaults** | Five absent tags come back as `Event: "?"`, `Result: "*"`; the header map always holds seven entries | A missing tag is indistinguishable from a literal `"?"` without reading the bytes. The row imports with `?` values, which is honest enough |
-| **An unterminated comment silently swallows the rest of the game** | An unclosed `{` consumes four plies and the termination marker, and the parse reports complete success | **The most uncomfortable one**, because moves are lost with no signal at all. Accepted on the same grounds: the file is on disk, and detecting it means our own brace matching |
-| **The whole table is cheap to be wrong about, and that is the point** | — | Nothing here can lose a game: the PGN file is untouched, so every one of these is a re-import away from being fixed once it is understood |
-| **`[Variant "Fischerandom"]` flattens to standard chess** | Maps to `chess` and the standard starting position, so a Chess960 game with no `FEN` derives a plausible wrong mainline and reports nothing | Real Chess960 exports carry `SetUp`/`FEN`. Checking the variant name against a list we maintain is a rulebook |
-| **Bytes that are not PGN import as one empty row** | A PNG signature plus random bytes yields *one game with seven default headers and no moves* rather than a refusal | The guard would be one line — and it would be a rule of ours, which is the thing this ADR declines. An empty row is visible and removable |
-| **A game with no movetext imports** | Accepted by the library, so accepted by us | Also not obviously wrong: a scheduled-but-unplayed game legitimately looks like this |
+This is written as an **assumption** rather than buried in the risk table below, because it is the one
+place where the policy knowingly accepts a *silently wrong game* rather than a missing one, and that
+deserves to be stated where someone will find it:
 
-**The through-line:** every mitigation would be a check we write and maintain, and every failure it
-would catch is recoverable by re-importing — **we do not delete the PGN files, so the database is
-disposable.** That is a fact about how the app works, not a property anyone has to defend: drop the
-database, import again. **A wrong row is a re-import; a validation layer is forever.**
+> A file using German or French piece letters will import, will contain moves nobody played, and
+> nothing will say so. `pgn-reader` drops the tokens it cannot parse; `chessops` rewrites them into
+> different legal moves. The two produce different wrong games from the same bytes.
 
-**Only four of the eighteen corpus fixtures are errors**, which is the honest measure of how much this
-policy actually rejects: an illegal move, two localised-notation files that fail at a later token, and
-an unrecognised variant name. Everything else the libraries accept, so we do.
+**Flagged for a later release as B-115** — better error handling, not detection. The distinction
+matters and it is what makes B-115 cheap where B-098 was not: **we do not need to know what language a
+file is in, only that the parser silently discarded part of it.** Comparing the parser's token count
+against the movetext's own is a generic "something was dropped" signal that needs no language table,
+no heuristics and no per-token guessing, and it catches every other silent-drop case as a bonus. It is
+a check of ours, so it is not in the MVP — but when it arrives it should be that one, not a language
+scan.
+
+## Accepted risks — **measured, B-007 milestone 1**
+
+These are the cases where a library silently returns a game that is not the game in the file. Every
+row is now measured on **both** sides rather than reasoned about, and the measurement changed several
+of them: an earlier version of this table was written from chessops' behaviour alone and was wrong
+about what the importer can see.
+
+**The headline result: `pgn-reader` refuses exactly one of the eighteen fixtures.** So the import
+error set is not empty, as this ADR feared it might be, but it is very nearly so — and everything
+else below is tolerated by both libraries without complaint.
+
+| Case | `pgn-reader` (import) | `chessops` (display) | Why it is accepted |
+|---|---|---|---|
+| **Unrecognised piece letter** (`Sf3`) | **Drops the token.** `e4 e5 Sf3 Sc6 Lb5 a6` → `e4 e5 a6`, so black's `a6` becomes white's third move | **Rewrites the token.** `Sf3` → the legal pawn move `f3`, giving `e4 e5 f3 c6` before truncating | **Two different wrong games from one file, neither reported.** Covered by the stated assumption above and **flagged as B-115** for a later release. Not accepted quietly: it is the worst case in this table |
+| **Illegal move** (`Qg7`) | Accepts all 9 tokens — no legality check | Refuses it, truncates at ply 6 | So the ply count and the playable game disagree. Making them agree means a legality walk over every import, which is the validation this ADR declines |
+| **Unterminated comment** | **REFUSED** — `unterminated comment`, no game at all | Reads it as a complete success, silently losing four plies and the marker | The only refusal in the corpus. Note the asymmetry: the *stricter* library is the one doing the importing, which is the good way round |
+| **Unterminated tag quote** | Recovers: **one** game, seven correct tags | Splits into **two** games, the first with none of the real tags | Same bytes, different game count. Consequence: a game's index in a file is not a stable identifier for an error message |
+| **Missing roster tags** | Reports the 2 tags that exist | Fabricates 7 defaults (`?`, `*`) | **This one is retired rather than accepted:** the importer sees the truth for free, so nothing is hidden on the side that stores data |
+| **Duplicate tags** | Hands back all 9 in file order | Collapses to 7, keeping the first | Not a validation question — **the importer must choose**, which is a decision. First-one-wins, to stay consistent with the display |
+| **`Result` vs termination marker** | Both available (`tag()` and `outcome()`) — which it prefers is **still unmeasured** | Marker overwrites the tag: reports `0-1` for a file tagged `1-0` | Measure at milestone 2 and prefer the tag; a wrong derived `result` is a re-import |
+| **Bytes that are not PGN** | One game, **zero tags, zero tokens** | One game with 7 fabricated headers | An empty row either way. Rejecting it means a rule of ours; the Rust row is at least visibly empty |
+| **No movetext at all** | Imports as a row with no moves | Same | Also not obviously wrong: a scheduled-but-unplayed game looks exactly like this |
+| **`[Variant "Fischerandom"]` without `FEN`** | Imports; builds no position, so has no opinion | Flattens to standard chess and derives a legal, wrong mainline | Catching it means maintaining our own list of variant names |
+| **Unsupported variant name** | Imports happily | Refuses to build a position; indistinguishable from a bad FEN | An import success and a display failure, like the illegal-move row |
+
+**The through-line:** every mitigation is a check we would write and maintain, and every failure it
+would catch is recoverable — **we do not delete the PGN files, so the database is disposable.** Drop
+it, import again. A wrong row is a re-import; a validation layer is forever.
+
+**What genuinely surprised the measurement**, recorded because the pattern recurs: the two libraries
+disagree far more widely than "do they agree on legality". They disagree about how many games a file
+contains, how many tags it has, whether it parses at all, and — in the localised-notation case — about
+which wrong game to produce. None of that is a bug in either. They are answering different questions
+for different callers, and the corpus is what makes the differences visible instead of theoretical.
 
 If any of these turns out to matter in practice, the fix is **one targeted check with a fixture and a
 recorded reason** — not a general validation layer, and not a rule added quietly because it seemed
@@ -150,17 +195,21 @@ Simplicity is the second argument and it compounds:
 - **`src/model/game.ts` never gains disposition or warning columns**, which ADR-0008 required and
   which — usefully — were never actually added, so there is nothing to unwind.
 - **B-011's migration gets smaller** for the same reason.
-- **B-064's shared assertion becomes boolean.** ADR-0008 had `shakmaty` and `chessops` agreeing on
-  *the ply at which a mainline truncates*; they now only have to agree on *whether a game is valid*.
-  A far smaller surface for two rule implementations to diverge on.
+- **B-064 largely evaporates for the MVP.** "Two chess rule implementations must agree" is a risk only
+  because both walk moves. In the MVP only `chessops` does — the importer never builds a board — so
+  there is nothing to diverge. The risk returns with the position index (B-018/B-042), and returns
+  smaller, because by then the shared corpus already exists to test it against.
 - **B-098 (notation-language detection) is no longer needed at all** and can be rejected rather than
   deferred. B-097's import report shrinks from "make rare warnings re-findable without training the
   user to dismiss them" to "list the errors".
 
 ## Consequences
 
-- **Positive:** B-007 is materially smaller. The failure mode is loud rather than quiet. Two states
-  instead of three. Three backlog items simplify and one disappears.
+- **Positive:** B-007 is materially smaller — no positions, no FEN handling, no variant selection, no
+  legality walk, and `shakmaty` is not even a direct dependency. Two states instead of three. Three
+  backlog items simplify and one disappears. **B-064 largely evaporates for the MVP**: "two chess rule
+  implementations must agree" is a risk only because both walk moves, and in the MVP only `chessops`
+  does. It returns with the position index.
 - **Negative / tradeoffs:**
   - **Games in the irreplaceable tail — club games, arbiter exports, hand-typed files — will be
     refused rather than half-understood.** This is the real cost, and it is accepted on the grounds

@@ -21,6 +21,20 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# ADR-0003: Rust owns bulk PGN parsing. ADR-0009: the libraries are the only validator.
+#
+# **`shakmaty` is deliberately not listed here**, though `pgn-reader` depends on it and re-exports it.
+# The MVP importer never builds a board: hot fields come from tags, `plyCount` is a token count, and
+# `result` comes from the tag or the termination marker. `pgn-reader` validates *syntax*; legality is
+# a separate step that only happens if we ask shakmaty to play the moves — and asking is us adding
+# validation, which ADR-0009 declines.
+#
+# Legality is still checked, in the place it is free: `mainline.ts` walks a game with `chessops` when
+# the user opens it, and truncates at the first illegal move. One game rather than three thousand.
+# shakmaty returns as a direct dependency when Rust genuinely needs positions — the position index
+# (B-018/B-042) and engine analysis (B-019), both post-MVP — and the `variant` feature comes with it.
+pgn-reader = "0.29"
+
 # An integration test in `tests/` can only use the crate's public API plus dev-dependencies, so
 # serde_json is listed twice on purpose. Same version, already in the graph, so it costs no extra
 # build — `tests/fixtures_contract.rs` needs it to read `fixtures/pgn/expected.json`.

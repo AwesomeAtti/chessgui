@@ -306,7 +306,23 @@ Session 5:
   permissive tiered policy as disproportionate, and the evidence backs that rather than the ADR.
   **Four rules replace seven:** a game imports or it errors; nothing is repaired; **the libraries are
   the validator and we add nothing**; variants are selected from the tag.
-- **Two follow-up corrections from the owner, and both cut further than the first pass did.**
+- **A third correction, and the largest: "if pgn-reader doesn't validate, why do we need to?"**
+  It doesn't, and we don't. `pgn-reader` validates *syntax* and says plainly that it does not check
+  move legality — legality happens only if we ask `shakmaty` to play the tokens into a position, and
+  **asking is us adding validation.** Nothing in the MVP needs a board: every ADR-0005 hot field comes
+  from tags, `plyCount` is a token count, `result` comes from the tag or the termination marker.
+  **And legality is already being checked in the place where it is free** — `mainline.ts` walks a game
+  with `chessops` when the user opens it and truncates at the first illegal move. One game on demand,
+  not three thousand at import. A game with a broken move now lands in the library and visibly stops
+  when opened, which is a better failure than being refused at the door.
+  **Three things fell out.** `shakmaty` is **not a direct dependency** — the `variant` feature I added
+  an hour earlier is not needed until the position index. **B-064 largely evaporates for the MVP**
+  (deferred to P3): "two rule implementations must agree" is a risk only because both walk moves, and
+  now only one does. And **`expected.json` lost its import expectations entirely** — `outcome` and
+  `errorCode` were written from theory, were wrong twice as the policy moved, and an import error is
+  now exactly a game `pgn-reader` refuses, **which nobody has measured**. The manifest carries only
+  measured values; milestone 1 fills the rest in, and the answer may be "none of them".
+- **Two earlier corrections from the owner, both of which also cut deeper than my first pass.**
   *(a)* **"We cannot change the behaviour of dependencies — use their error handling and validation."**
   My first draft of ADR-0009 listed conditions the libraries *accept* — duplicate tags, a `Result`
   disagreeing with the termination marker, missing roster tags — which meant we would have had to check
@@ -740,8 +756,15 @@ Session 1:
 3. **Bus factor of one across the entire chess stack.** Niklas Fiekas maintains shakmaty,
    pgn-reader, chessops, chessground, and fishnet. Mitigated by all of it being GPL, open, and
    small — forkable if needed — but worth knowing rather than discovering.
-4. **Two chess rule implementations must agree** (shakmaty and chessops). Accepted cost of the
-   ADR-0003 split; tracked as B-064.
+4. **Two chess rule implementations must agree** (shakmaty and chessops) — **dormant for the MVP,
+   session 5.** This was an accepted cost of the ADR-0003 split, but it is a risk only because both
+   libraries walk moves, and under ADR-0009 the importer does not: `pgn-reader` checks syntax, and
+   legality is `chessops`' job on the display side alone. **One walker, nothing to diverge.** It wakes
+   up with the position index (B-018/B-042) and engine analysis (B-019), and wakes up smaller, since
+   `fixtures/pgn/` already exists to test it against. B-064 deferred to P3. One live comparison
+   remains at B-007 milestone 1, and it is about *parsing* rather than rules: chessops rewrites `Sf3`
+   to `f3` and keeps the first of two duplicate tags, and if `pgn-reader` differs the same file yields
+   different data on the two sides.
 5. **Documentation-as-substitute-for-code: effectively closed, and it closed by being tested.**
    The app runs. More to the point, **running it immediately invalidated a design decision that
    had survived a specification, a milestone document, and a code review** (B-084). The screen
@@ -833,7 +856,18 @@ of `.pgn` files on disk, mirroring the TypeScript assertion, so a fixture added 
 never listed — read by nothing, asserted by nothing — now fails. **Needs one more `cargo fmt` and
 `cargo test` pass**, since the AI cannot run either.
 
-1. **B-007 — PGN import. The spec is written and awaiting approval:
+1. **B-007 milestone 1 — written, needs one run.** `src-tauri/tests/pgn_reader_probe.rs` plus
+   `pgn-reader = "0.29"` in `Cargo.toml`. It prints what `pgn-reader` does with all eighteen fixtures
+   and **asserts nothing about behaviour on purpose** — asserting before a human has read the output
+   is how a test ends up certifying a bug. The question it answers: does the Rust tokenizer rewrite
+   `Sf3` to `f3` the way chessops does, and what if anything does it refuse outright?
+   **`Cargo.lock` will change** — shakmaty was added and then removed as a direct dependency in the
+   same session. Commit it.
+   ```
+   cargo fmt --manifest-path src-tauri/Cargo.toml
+   cargo test --manifest-path src-tauri/Cargo.toml --test pgn_reader_probe -- --nocapture
+   ```
+2. **B-007 — the rest. The spec is written and awaiting approval:
    `docs/feature-specs/b007-pgn-import.md`.** Everything in front of it is closed — ADR-0008 accepted
    *and* amended, corpus in place, and the two rules most likely to have been implemented wrongly
    corrected before any code existed. Two scope calls to agree or reject: **paste before file**, since
@@ -844,18 +878,18 @@ never listed — read by nothing, asserted by nothing — now fails. **Needs one
    Rust side agrees decides how rule 4 is built, and a disagreement is B-064 tested rather than
    discussed. The Rust/sandbox split is handled rather than lamented: the corpus means one
    `cargo test` asserts eighteen cases whose expected values were measured before the code.
-2. **B-113 — done (session 5).** ADR-0008's addendum is accepted: rule 3b superseded, rule 6 out of
+3. **B-113 — done (session 5).** ADR-0008's addendum is accepted: rule 3b superseded, rule 6 out of
    the MVP. Read the addendum before implementing either.
-3. **B-099 — done (session 5).** ADR-0008 went from seven rules and zero evidence to seven rules
+4. **B-099 — done (session 5).** ADR-0008 went from seven rules and zero evidence to seven rules
    and eighteen fixtures, of which the three interesting ones contradict it. The reason to do this
    before B-007 held up exactly as argued: fixtures written against a *policy* test the policy,
    whereas fixtures written against a finished importer tend to be the ones the importer already
    passes. Remaining work sits in B-007 (assert `disposition` and `warnings`) and B-098.
-4. Then **B-011 — persistence**, where the ADR-0005 migration finally gets written and now carries
+5. Then **B-011 — persistence**, where the ADR-0005 migration finally gets written and now carries
    four things this session added: ADR-0008's disposition and warning columns, `ecoUrl`, and the
    two accuracy columns; then **B-008 / B-010** — the real table and search, where TanStack arrives
    and B-033's 200 ms target becomes measurable.
-5. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
+6. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
    the B-067 throttling rule across from `tech-stack.md`. The source layout is already recorded
    there, so this file is about component boundaries and data flow rather than directories.
 

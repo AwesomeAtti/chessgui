@@ -1,17 +1,18 @@
 //! The Rust half of the shared fixture corpus contract.
 //!
-//! There is no PGN code here yet — `pgn-reader` and `shakmaty` arrive with B-007 — so this does
-//! not walk a mainline or assert an outcome. What it does assert is the part most likely to
-//! break silently: that `fixtures/pgn/` is reachable from `src-tauri/`, that its manifest parses,
-//! and that every file the manifest lists actually exists.
+//! This does not walk a mainline or judge a game, and under ADR-0009 it never will: the MVP
+//! importer builds no positions, because `pgn-reader` validates syntax and legality is checked on
+//! the display side where it costs one game instead of three thousand. What this asserts is the
+//! part most likely to break silently — that `fixtures/pgn/` is reachable from `src-tauri/`, that
+//! its manifest parses, and that every file it lists exists.
 //!
-//! That matters because the corpus is deliberately shared rather than duplicated per language
-//! (ADR-0008 rule 3, B-064). A relative path that stops resolving would not fail loudly — it
-//! would simply mean the Rust suite stops reading the corpus while the TypeScript suite carries
-//! on passing, which is the exact shape of divergence this arrangement exists to prevent.
+//! That matters because the corpus is shared rather than duplicated per language. A relative path
+//! that stopped resolving would not fail loudly: the Rust suite would simply stop reading the
+//! corpus while the TypeScript suite carried on passing.
 //!
-//! When B-007 lands, the legality assertions belong here, against the same `truncatedAtPly`
-//! numbers `mainline.test.ts` already asserts.
+//! What B-007 adds here is narrower than an earlier version of this comment promised: whatever
+//! `pgn-reader` turns out to refuse, once milestone 1 has measured it. Legality assertions belong
+//! on the TypeScript side, which is the side that walks moves.
 use std::fs;
 use std::path::PathBuf;
 
@@ -61,23 +62,13 @@ fn shared_corpus_is_reachable_and_every_listed_fixture_exists() {
             .expect("every fixture entry needs a `file` string");
         assert!(dir.join(name).is_file(), "missing fixture file: {name}");
 
-        // Keeps the two suites honest about ADR-0009 rule 1's vocabulary: a typo here would
-        // otherwise be asserted against on one side and ignored on the other.
-        let outcome = entry["outcome"]
-            .as_str()
-            .expect("every fixture entry needs an `outcome` string");
+        // Every entry must explain itself. A fixture nobody can describe is a fixture nobody dares
+        // change — and this is now the only content assertion, because the manifest deliberately
+        // carries no import expectations until B-007 milestone 1 measures what pgn-reader refuses.
+        let note = entry["note"].as_str().unwrap_or_default();
         assert!(
-            matches!(outcome, "imports" | "error"),
-            "unknown outcome in {name}: {outcome}"
+            !note.is_empty(),
+            "{name} has no note explaining why it exists"
         );
-
-        // An error with no code cannot be shown to a user, and a code on a game that imports is a
-        // contradiction. Both are easy to introduce by hand-editing the manifest.
-        let code = entry["errorCode"].as_str();
-        if outcome == "error" {
-            assert!(code.is_some(), "{name} expects an error but names no code");
-        } else {
-            assert!(code.is_none(), "{name} imports but names an error code");
-        }
     }
 }
