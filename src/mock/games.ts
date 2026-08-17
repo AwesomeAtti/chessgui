@@ -14,6 +14,7 @@
  * - a fully unknown date, a year-only date, and a complete one (B-059)
  * - an unfinished game, so `result` is null rather than a string (B-060)
  * - tags we do not promote to columns, retained rather than dropped (B-060)
+ * - `ecoUrl` populated on exactly one game, because most sources never emit `ECOUrl` (B-102)
  *
  * Replaced by real imported games at B-007.
  */
@@ -51,6 +52,8 @@ export const MOCK_GAMES: readonly Game[] = [
     round: "3",
     result: GameResult.WhiteWin,
     eco: "B90",
+    // The only mock game carrying this: most sources never emit `ECOUrl` (B-102).
+    ecoUrl: "https://www.chess.com/openings/Sicilian-Defense-Najdorf-Variation",
     whiteElo: 2118,
     blackElo: 2074,
     plyCount: 71,
@@ -63,6 +66,7 @@ export const MOCK_GAMES: readonly Game[] = [
       Black: "Väinö Ökonen",
       Result: "1-0",
       ECO: "B90",
+      ECOUrl: "https://www.chess.com/openings/Sicilian-Defense-Najdorf-Variation",
       WhiteElo: "2118",
       BlackElo: "2074",
       PlyCount: "71",
@@ -83,6 +87,7 @@ export const MOCK_GAMES: readonly Game[] = [
     round: "?",
     result: GameResult.Draw,
     eco: "D37",
+    ecoUrl: null,
     whiteElo: 2201,
     blackElo: 2118,
     plyCount: 96,
@@ -108,6 +113,7 @@ export const MOCK_GAMES: readonly Game[] = [
     round: null,
     result: GameResult.BlackWin,
     eco: "C65",
+    ecoUrl: null,
     whiteElo: null,
     blackElo: 1954,
     plyCount: 54,
@@ -131,6 +137,7 @@ export const MOCK_GAMES: readonly Game[] = [
     // Still in progress: PGN result `*`. Null, never the string.
     result: null,
     eco: "A45",
+    ecoUrl: null,
     whiteElo: 2074,
     blackElo: 2201,
     plyCount: 22,

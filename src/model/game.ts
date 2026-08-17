@@ -78,7 +78,24 @@ export interface Game {
   readonly date: PgnDate;
   readonly round: string | null;
   readonly result: GameResult | null;
+  /** The ECO code (`C50`), from the `ECO` tag. Coarse, standard, cross-source. */
   readonly eco: string | null;
+  /**
+   * The opening-reference URL, from chess.com's `ECOUrl` tag (B-102).
+   *
+   * Kept alongside `eco` rather than folded into it, because **it is finer-grained than the
+   * ECO code, not a prettier version of it**: in the measured sample, C41 and C47 each mapped
+   * to two different URLs identifying two different lines. So this can distinguish games the
+   * ECO code cannot.
+   *
+   * **Do not derive a display name from the slug.** The apostrophes and the colon in the real
+   * name are unrecoverable — `Kings-Indian-Attack` and `Birds-Defense` decode to "Kings Indian
+   * Attack" and "Birds Defense", which are visibly wrong. An opening *name* column, if it is
+   * ever wanted, comes from an ECO-to-name table instead (B-105).
+   *
+   * `null` for every source that does not emit the tag, which is most of them.
+   */
+  readonly ecoUrl: string | null;
   readonly whiteElo: number | null;
   readonly blackElo: number | null;
   readonly plyCount: number | null;

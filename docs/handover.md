@@ -388,6 +388,16 @@ Session 4:
   Raised **B-103** (the result vocabulary is per-player and richer than `1-0`, but the sample has no
   draws, so the draw strings are unobserved — do not guess them) and **B-104** (whether to store
   `accuracies` at all, given it is another engine's derived output that we cannot reproduce).
+  **Decision 3 — both opening values are stored, as two columns** (`eco` and `ecoUrl`), on the
+  owner's call. Inspecting the 23 distinct URLs supplied a better reason than "we might want it":
+  **`ECOUrl` is not a prettier `ECO`, it is a finer classification** — `C41` and `C47` each mapped to
+  two different URLs identifying two different lines, so the URL separates games the code cannot.
+  Added to `src/model/game.ts` and the mock data, with an addendum to ADR-0005. Raised **B-105**,
+  and the reason it exists is a trap worth remembering: **the obvious way to show an opening name is
+  to prettify the URL slug, and it ships visibly wrong text.** `Kings-Indian-Attack` and
+  `Birds-Defense` decode to "Kings Indian Attack" and "Birds Defense" — the apostrophes are gone —
+  and the colon in "Ruy Lopez Opening: Berlin Defense" has no representation in a slug at all. Names
+  come from an ECO table, which is also the only version that can be localised.
   **A postscript that is really the session's whole lesson in miniature.** Asked whether JSON `eco`
   maps safely to `ECOUrl`, the measured answer was yes — 21/21 byte-identical, zero mismatches — but
   `eco` is *absent* on 4 of 25 games whose PGN still has `ECOUrl`. All four were unrated daily games,

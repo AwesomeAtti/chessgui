@@ -99,3 +99,28 @@ form of games that don't group, dates that don't sort, and tags that vanish.
   this ADR assumes but does not implement. B-061 (zstd) may later compress the PGN column.
 - **This ADR does not re-open the storage gate.** It rests on the same conditions ADR-0004
   does, and re-hardens with it at B-015.
+
+## Addendum, 2026-08-17 — `ecoUrl` promoted alongside `eco` (B-102)
+
+Measuring a real chess.com account produced a reason to hold two opening columns rather than one.
+**`ECOUrl` is not a prettier `ECO`; it is a finer classification.** In the sample, `C41` and `C47`
+each mapped to two *different* opening URLs identifying two different lines — so the URL
+distinguishes games the code cannot. Both are therefore promoted: `eco` because it is coarse,
+standard and cross-source, and `ecoUrl` because it is more specific where it exists.
+
+`ecoUrl` is `null` for every source that does not emit the tag, which is most of them. That is
+accepted: a sparse column is honest about the data, and the alternative — inventing a value — would
+break the rule this ADR is built on.
+
+**Two traps recorded so they are not walked into later.**
+
+**Do not derive a display name from the URL slug.** The real opening name contains punctuation the
+slug destroys: `Kings-Indian-Attack` and `Birds-Defense` decode to "Kings Indian Attack" and "Birds
+Defense", and the colon in "Ruy Lopez Opening: Berlin Defense" is unrecoverable. An opening *name*
+column, if wanted, comes from an ECO-to-name table instead — vendor-neutral and correctly
+punctuated. That is **B-105**.
+
+**Do not source `ecoUrl` from the chess.com JSON `eco` field**, even though the two are
+byte-identical wherever both appear (21/21 in the sample, zero mismatches). The JSON field is
+*absent* on 4 of 25 games whose PGN still carries the tag, so it is strictly the less available
+copy. Per B-102 both opening values come from the PGN tags.
