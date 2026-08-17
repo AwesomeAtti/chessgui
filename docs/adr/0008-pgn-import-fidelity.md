@@ -1,9 +1,11 @@
 # ADR-0008: PGN import fidelity — accept, repair, or reject
 
-- **Status:** accepted
+- **Status:** accepted, **amended session 5** — see the addendum: rule 3b is superseded and rule 6
+  no longer applies to the MVP. Read the addendum before implementing rules 3b or 6.
 - **Date:** 2026-08-17
-- **Deciders:** Owner (session 4) — accepted after one substantive challenge, recorded below
-- **Backlog link:** B-049 — blocks B-007; constrains B-011, B-073, B-078
+- **Deciders:** Owner (session 4) — accepted after one substantive challenge, recorded below.
+  Amended session 5 (B-113) after a second challenge and a measurement, both of which changed it
+- **Backlog link:** B-049 — blocks B-007; constrains B-011, B-073, B-078. Amendment: B-113
 
 ## Context
 
@@ -232,3 +234,85 @@ becomes optional or deferred, and nothing else in this ADR moves.
   because file PGN has no identity; chess.com supplies a stable `uuid`, so API-sourced games key on
   that and the false-merge risk this ADR accepted **does not apply to them at all**. Files keep the
   content hash. Rule 3b also stops being blind, because `rules` is read directly.
+
+## Addendum, session 5 — rule 3b rewritten and rule 6 removed from the MVP (B-113)
+
+Both changes come out of B-099's fixture corpus, and both are cases where the fixtures corrected the
+document rather than confirming it. **Status: accepted** (owner, session 5).
+
+### Rule 3b, revised: select the variant explicitly on both sides
+
+**Superseding text.** Read the `Variant` tag first, and derive the mainline *under the variant it
+names*. `shakmaty` provides `VariantPosition` behind its `variant` cargo feature, and `chessops`
+already does the same, so both sides can walk Antichess, Atomic, Crazyhouse, Horde, King of the
+Hill, Racing Kings and Three-Check correctly. A game in a supported variant is `clean` if its moves
+are legal *under those rules*, exactly like a standard game, and it is playable in the UI.
+
+The `variant_unsupported` warning survives, but only for the two cases where it is true:
+
+- **An unrecognised variant name.** Both libraries fail here symmetrically — `ParseVariantError` in
+  shakmaty, `ERR_VARIANT` in chessops — so the game imports with headers and verbatim PGN and no
+  derived mainline. This is the branch rule 3b was really protecting, and it is the one the original
+  text did not describe.
+- **`[Variant "Fischerandom"]` with no `FEN`.** Measured: chessops maps this to *standard chess* and
+  the standard starting position, so a Chess960 game with no position header derives a plausible,
+  wrong mainline and reports no error at all. A new warning code, `variant_assumed_standard`, covers
+  the general case of a variant name we accept by flattening. Chess960 exports normally carry
+  `SetUp`/`FEN`, and "normally" is doing all the work in that sentence.
+
+**Why the original text was wrong, and it is more interesting than a mistake.** Rule 3b justified
+itself with "walking an Antichess game under standard rules produces *illegal move at ply 2*".
+Measured, that is **true of the Rust side and false of the TypeScript side**: `shakmaty` requires
+the caller to choose a variant, so an importer that ignores the tag really does produce the useless
+report — while `chessops`'s `startingPosition()` reads the tag itself and gets it right. So the two
+libraries this project deliberately pairs have **opposite defaults for the same tag**, which is
+precisely the B-064 category, and rule 3b was written from one side's default without noticing the
+other side had already solved it. Suspending derivation would have frozen that asymmetry into the
+specification: the database refusing to derive a game the UI can play through in full.
+
+**Two consequences that must not be lost**, because they are the reason the old rule looked
+attractive:
+
+- **Variant identity is part of position identity.** A Zobrist-style index (B-042) that mixes
+  Antichess and standard positions returns matches that mean nothing, since the same arrangement of
+  pieces is a different game state under different rules. Either the variant is part of the key or
+  variant games stay out of position search (B-018). Recorded now because the index does not exist
+  yet and this is free to state and expensive to retrofit.
+- **A legality claim now spans eight rule sets rather than one**, so B-064's shared corpus matters
+  more, not less. `fixtures/pgn/variant-*.pgn` are the starting cases.
+
+### Rule 6, removed from the MVP: no content hashing until dedupe has a customer
+
+**The owner's challenge was that nothing in the MVP needs to hash a game, and it is correct.**
+Following it through, the ADR's own reasoning does not survive contact:
+
+Rule 6 exists to serve idempotent re-import, which exists to serve ADR-0004's condition that the
+database stay derivable (B-078). But **derivability requires only that dropping the database and
+rebuilding it from the retained PGN produces the same database** — and that works whether or not
+import deduplicates, because each source file is read once per rebuild. Dedupe is a different
+property: it protects against importing *the same file twice into an existing database*. Those two
+were conflated when this ADR was written, and the conflation is what made a content hash look
+load-bearing.
+
+**So rule 6 does not apply to the MVP.** B-007 assigns every imported game a stable row ID and no
+content key. Importing the same file twice produces duplicate rows, which is **visible and
+removable** — the failure mode this ADR explicitly preferred over a silent false merge, now obtained
+for free by not implementing the mechanism. Deduplication becomes B-022's problem, where merging is
+already the subject and a user can confirm it.
+
+Three things fall out, and the last one is the point:
+
+- **B-078's wording narrows.** "Import is idempotent" becomes "rebuilding from the same source set
+  produces the same database". ADR-0004's gate downgrade is untouched, because its substance is that
+  nothing exists only in the database.
+- **The rule-6 hole found while writing this addendum goes away instead of being patched.** The
+  content key covers the Seven Tag Roster plus moves; `Variant` is not in the Seven Tag Roster, so an
+  Antichess game and a standard game with identical players, date, round, result and moves would
+  have hashed identically. The first instinct was to add `Variant` to the key. **Deleting the key was
+  the better answer, and the question that got there was "why are we hashing at all?" rather than
+  "is the hash correct?"** — recorded because the second question cannot reach the first.
+- **What survives for later.** `scripts/survey-pgn.mjs` still computes content keys and still reports
+  collisions; it is an instrument, not the importer, and its output is the evidence whenever dedupe
+  is designed. `fixtures/pgn/dedupe-*.pgn` stay in the corpus as specification for the same reason.
+  For chess.com, B-102 already established that `uuid` supplies a real identity, so that source
+  never needed the hash either.

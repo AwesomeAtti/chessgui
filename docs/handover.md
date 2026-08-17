@@ -3,19 +3,21 @@
 > The current state of the project. Update at the end of every session so the next session
 > (human or AI) can resume with zero chat history.
 
-**Last updated:** 2026-08-17 · **Updated by:** AI (Stage 3 / session 4) · **Kit version:** 0.2.0
+**Last updated:** 2026-08-17 · **Updated by:** AI (Stage 3 / session 5) · **Kit version:** 0.2.0
 
-**Head at session start:** `61fe8ed`, clean, `origin/main` level with it. **Session 4 committed in
-four increments** — `524772d`, `20303e7`, `62a25d7`, plus a final commit carrying the `ecoUrl` and
-accuracy model changes, this handover, and the `.gitignore` rule. **Check `git log origin/main..HEAD`
-before finishing: three of those commits were still unpushed when the session ended.**
+**Head at session start:** `760dcc9`, `origin/main` level with it — **session 4's commits were all
+pushed after all**, so the warning that stood here ("three of those commits were still unpushed")
+was itself the stale-header failure it was written to prevent. Checked with
+`git --no-optional-locks log origin/main..HEAD`, which returned nothing. Session 5's work is
+uncommitted at the time of writing; see "Session 5" under Recently completed for what it contains
+and the one local command it needs.
 
 Written after the work, not before — the two previous handovers both carried a stale
 "uncommitted" claim in this position because the header went out of date during the session it
 described.
 
-**State in one line:** M1 closed and owner-verified, ADR-0008 accepted, the import path fully
-specified and not yet started. Next task is **B-099**.
+**State in one line:** M1 closed and owner-verified, ADR-0008 accepted, and the project now has a
+test harness, which it did not before. Next task is **B-099**, now actually startable.
 
 ## Project summary
 
@@ -294,6 +296,35 @@ Session 4:
   and a misdiagnosis that would send someone hunting a parser bug. New rule 3b suspends move
   derivation on a non-standard `Variant` tag instead; **B-100**.
 
+Session 5:
+
+- **ADR-0008 amended, and both halves were changed by something outside the document** — one
+  measurement and one owner challenge. Status is still `accepted`; the addendum is at the end of the
+  ADR and the header points at it. **Rule 3b superseded: select the variant named in the tag and walk
+  it, on both sides.** Verified rather than assumed — `shakmaty` exposes `VariantPosition` with the
+  same eight rule sets `chessops` has, **behind an opt-in `variant` cargo feature** that
+  `src-tauri/Cargo.toml` will need and that would otherwise have appeared as a compile error inside
+  B-007. A supported variant with legal moves is now `clean`; `variant_unsupported` narrows to
+  unrecognised names, and a new `variant_assumed_standard` covers `Fischerandom` flattening to
+  standard chess. **The old rule's premise was true of Rust and false of TypeScript** — shakmaty
+  makes the caller choose a variant, chessops reads the tag — so the two libraries this project
+  deliberately pairs have opposite defaults for the same tag. That is the B-064 category, and
+  suspending derivation would have written the asymmetry into the specification.
+- **Rule 6 removed from the MVP: nothing hashes a game any more.** The owner's challenge was that
+  the MVP does not need a content key, and the ADR's own reasoning does not survive it. The hash
+  served idempotent re-import, which served ADR-0004's derivability condition — but **derivability
+  needs only that dropping the database and rebuilding from retained PGN reproduces it**, which holds
+  with or without dedupe. Dedupe is the different property of importing one file twice into an
+  existing database. Conflating the two is what made the hash look load-bearing, and the conflation
+  was mine. B-007 now assigns stable row IDs and no key; duplicate rows are possible, **visible and
+  removable**, which is the failure mode the ADR already said it preferred over a silent false merge.
+  Dedupe moves to B-022; B-078's wording narrows accordingly.
+  **The transferable part is the shape of the question.** A hole had been found in the key — the Seven
+  Tag Roster omits `Variant`, so an Antichess and a standard game with identical headers and moves
+  hash identically — and the instinct was to patch the key. Deleting it was better, and the question
+  that got there was **"why are we hashing at all?" rather than "is the hash correct?"** The second
+  question cannot reach the first, and I asked the second.
+
 ## Process change made this session
 
 **UI layout is mocked and approved before it is coded.** Added to `AGENTS.md` (mandatory
@@ -349,6 +380,83 @@ The kit is at 0.2.0.
   authoritative, so a wrong derivation rule is a re-import rather than data loss.
 
 ## Recently completed
+
+Session 5:
+
+- **B-106 — the project got a test harness, and the reason it needed raising is the finding.**
+  The session started by reviewing state and recommending B-099, and B-099 turned out not to be
+  startable: **four sessions in, there was no test runner of any kind** — no vitest, no
+  `*.test.ts`, no `#[cfg(test)]`, no `cargo test` in CI, no fixtures directory. Nothing in the
+  handover said so, and worse, it read the other way: both `mainline.ts` and `survey-pgn.mjs` were
+  described as "verified against fixtures", which was true and meant *by a throwaway script, run
+  once, then discarded*. **In prose that is indistinguishable from having tests**, and B-099's
+  whole premise — one corpus, walked by both `shakmaty` and `chessops` — silently assumed a
+  harness on both sides.
+  Delivered: vitest 4 (`npm test`), the `test` block in `vite.config.ts`, **eleven committed tests
+  for `mainline.ts`** promoting session 3's discarded checks into permanent ones, `fixtures/` with
+  its contract and two fixtures, `src-tauri/tests/fixtures_contract.rs`, and CI running both suites
+  — `cargo test` on all three platforms rather than Linux-only, because the Rust test asserts a
+  relative path resolves and that is a B-069 divergence category. Recorded in `docs/tech-stack.md`.
+- **Writing the tests found two bugs, both in my own fixtures and neither in the walker.** A
+  castling test moved the rook before castling, and an endgame FEN claimed castling rights the
+  position could not have; `chessops` correctly refused both, and the first read of the red suite
+  looked like a walker defect. This is session 3's near-miss reproduced exactly — **verify the
+  fixture before believing the failure** — and it is the concrete argument for committing tests
+  rather than running them once: the throwaway version of this would have logged a bug that does
+  not exist. The fix was to check both positions against `chessops` directly before asserting
+  anything, which took one script and about a minute.
+- **Two negative controls run, and the habit is now five for five.** An intentionally illegal move
+  in the `clean` fixture failed its case; a deliberately broken corpus path failed loudly at load.
+  The second is the one worth keeping: without the `expected.length > 0` guard, a moved `fixtures/`
+  directory would produce zero iterations and a green suite, which is the "green means nothing"
+  failure that a test harness is supposed to remove rather than introduce.
+- **`docs/tech-stack.md` and the source-layout tree updated** — `fixtures/`, `src-tauri/tests/`,
+  the co-located test file, and a "Test harness" section carrying the reasoning.
+- **B-099 done — eighteen fixtures covering ADR-0008 rules 1, 2, 3, 3b, 4, 5 and 6**, with a test
+  asserting that exact rule set so the corpus cannot go stale unnoticed. Rule 7 is the import
+  report, which is UI (B-097) and has nothing to assert against a file. **`expected.json` keeps two
+  kinds of field apart on purpose:** `plies` and `truncatedAtPly` are *observed* and asserted today,
+  `disposition` and `warnings` are *specification* that only B-007 can check. Calling the second
+  pair verified would be B-106's mistake in a new place.
+- **Every expectation was measured before it was written, and that is the whole argument for doing
+  B-099 before B-007.** Three of the eighteen behave differently from what ADR-0008 would lead you
+  to write, and an importer built first would have been written to the ADR's assumptions — so these
+  would have looked like correct behaviour and the fixtures would have agreed with the bug.
+- **Finding 1, and the most consequential: localised SAN is not rejected, it is silently
+  reinterpreted.** `Sf3` does not fail. The PGN *tokenizer* drops the unrecognised piece letter and
+  hands back `f3`, a legal pawn move, so a German game becomes a different legal game that nobody
+  played — no warning, no truncation — until some later move happens to be impossible. Rule 4
+  argued that legality cannot arbitrate between notation languages because of the `R`/*roi*
+  collision; measured, it is worse, because the corruption happens *before* legality is consulted
+  and `node.san` no longer holds the file's own text. **B-098 raised P3 → P2.**
+- **Finding 2: `chessops` honours the `Variant` tag, so rule 3b's stated premise is false.**
+  `startingPosition()` reads the header and returns the right variant position — verified across
+  Antichess, Crazyhouse, Atomic, Three-check, King of the Hill, Horde and Racing Kings; a
+  Crazyhouse drop plays as a drop, pocket visible in the FEN. Rule 3b would have the importer
+  derive nothing for a game the frontend can play through in full, which is **B-064 divergence by
+  specification rather than by bug** — worse than the bug version, because it is intentional and
+  would be defended. Raised as **B-113**, and it is cheapest to settle now: no importer exists, so
+  the change costs a paragraph.
+- **Finding 3: an unsupported variant is indistinguishable from a broken position.** An unknown
+  `Variant` value returns `ERR_VARIANT`, which the reader surfaces as `truncatedAtPly: 0` — the same
+  observable as an unparseable FEN. And `[Variant "Fischerandom"]` silently maps to *standard
+  chess*, so a Chess960 game with no FEN derives a plausible wrong mainline with no error at all.
+  So rule 3b's instinct was right and its example was wrong.
+- **Four smaller measurements, each recorded on its fixture:** an unterminated comment swallows four
+  plies and the result token while reporting no truncation; an unterminated tag quote turns one
+  damaged game into **two**, so "imported 4 of 3" is a reachable import report; chessops fills
+  missing roster tags with `?`/`*`, so a missing tag is indistinguishable from a literal `"?"` and
+  the importer must judge disposition from the bytes rather than the parser's header map; duplicate
+  tags resolve **first-one-wins**, and nothing says `pgn-reader` agrees — a B-064 candidate with no
+  illegal move anywhere in it; and the movetext's final result token **overwrites** a contradicting
+  `Result` tag, which means a repair happens whether we ask for one or not.
+- **Three more bad fixtures of mine, and the third one is the lesson.** A castling test that moved
+  the rook first; an endgame FEN claiming castling rights it could not have; and an Antichess game
+  whose moves were not legal Antichess either. The last is the dangerous kind: it truncated at ply 2
+  and therefore appeared to *confirm* the rule-3b misdiagnosis the ADR predicted. **A fixture that
+  fails for the wrong reason is worse than one that fails for no reason**, because it corroborates
+  whatever you already believed. Cure was ten seconds per position against chessops before
+  asserting anything.
 
 Session 4:
 
@@ -421,28 +529,27 @@ Session 4:
   measurement in a single session, and the only one where the check took longer to run than the
   wrong explanation would have taken to write.
 - **`scripts/survey-pgn.mjs` written and tested — the instrument for B-101.** Dependency-free
-  Node; `npm run survey:pgn -- <path>`, with `--redact` for output destined for the repo.
+  Node; `npm run survey:pgn -- <path>`. No flags — paths print relative to the scanned input.
   Verified against synthetic fixtures covering every metric and both collision paths, **with a
   negative control** (a clean lichess-shaped file reports no anomalies) and a robustness pass
   (random binary, empty file, truncated tags, unbalanced parens — no crash, no hang). The
   negative-control habit is now three for three: `check:i18n`, B-048's plain-browser baseline,
   and this.
-  **Built redacted-by-default and inverted, in two corrections from the owner.** Cost of the
-  original framing: hiding identifying detail broke the tool's most useful output, because rule 6
-  is a judgement and a *count* of collisions cannot test a judgement — you have to look at the two
-  games. The report now prints each colliding pair game by game.
-  **The scope of the privacy constraint, stated correctly, because it was over-read twice:** it
-  covers the *developer's* footprint — commit identity, home paths, secret-shaped strings — which
-  is what the session-3 scan actually looked for. **Third-party game data is not in scope.**
-  `--redact` survives on the narrow version of that rule: the owner's own handle appears in every
-  White/Black field of their own games, and the per-repo identity is deliberately pseudonymous, so
-  pasting survey output in unredacted would undo it.
-  **Worth noticing, since it happened twice in one session:** an over-general safety framing
-  displaced a specific engineering requirement, and both times following the objection through
-  produced something better than conceding would have — B-100 first, the collision report second.
-  Also worth noticing: the first two attempts to write this entry were longer than the finding
-  justified. Three paragraphs of self-examination in a handover is a cost paid by every future
-  session that has to read it.
+  **It has no redaction mode, and the three corrections it took to get there are the lesson.**
+  Successive drafts hid player names, then hid them behind a flag, then justified the flag by the
+  repo's pseudonymous identity. Every version aimed at the wrong target, and the first one also broke
+  the tool's most useful output — rule 6 is a judgement, and a *count* of collisions cannot test a
+  judgement, so the report now prints each colliding pair game by game.
+  **The privacy constraint, stated correctly at last: it covers the developer's footprint** — commit
+  identity, home paths, secret-shaped strings — which is exactly what the session-3 scan looked for.
+  **Game data is not in scope.** Online games are public, the account handle is the repo's own name,
+  and opponents' names need nothing. **The only genuine leak was the absolute path, because a home
+  directory contains a real name — now fixed structurally by printing paths relative to the scanned
+  input, so there is no mode to remember.**
+  **Two things generalise.** An over-general safety framing displaced a specific engineering
+  requirement three times running, and each time the correction made the tool simpler *and* better.
+  And following the objection through beat conceding it — B-100 came from the first, the collision
+  report from the second, and a deleted flag from the third.
   **One result from the fixtures is worth keeping, because it validates rule 6's design rather
   than merely exercising it:** a game re-exported with different line wrapping, stripped clock
   comments and four fewer tags produced an *identical* content key to the original. That is
@@ -542,6 +649,19 @@ Session 1:
   never infer a draw by default.** One side reading `win` means that side won; anything unrecognised
   must warn and leave `result` null. That way the guess self-corrects on the first real drawn game
   instead of silently misreporting scores.
+- **B-112 — is broadcasting an audience this product serves?** Raised in session 5 when the owner
+  asked for streamer features: detachable component windows (board, players, eval bar) so OBS can
+  capture a *window* rather than a hand-drawn screen region. Recorded as B-107 – B-111, all at P3
+  as a holding value, because **B-112 is what prices them** and it is the first request in five
+  sessions that adds an *audience* rather than a capability. Not urgent and not blocking: nothing
+  in that group touches import, storage or search. Two things from the write-up are worth knowing
+  even if the answer is "no". **The architecture already permits popouts, and that is ADR-0007
+  earning its keep** — no component below `App.tsx` knows its placement, so a popout is just a
+  different container, which also means breaking that rule now costs more than it did. And
+  **B-108 is a real gate rather than paperwork**: a second window is a second webview with its own
+  JavaScript context, so it cannot see `App.tsx`'s state at all — though read-only projection
+  windows would sidestep the whole state question, which is worth noticing before anyone builds a
+  cross-window store for a use case that does not need one.
 - **B-006 — Engine process management & UCI transport.** Escalates to a platform-surface
   commitment only if an engine binary is bundled. Not triggered by M1. The B-048 spike already
   demonstrated the transport half working (spawn, stdin/stdout, throttled emit, clean kill with
@@ -611,6 +731,17 @@ Session 1:
     plan rests on how often something happens, find the control *first*, because the cost of
     running one is minutes and the cost of acting on a plausible story is rework plus a false
     belief that outlives it.
+    **Updated session 5 — this is now six, and the sixth is the first one found inside an accepted
+    ADR.** B-099's fixtures measured ADR-0008 rule 3b's premise and it is false: chessops honours the
+    `Variant` tag, so a variant game does not produce the "illegal move at ply 2" misdiagnosis the
+    rule was written to prevent. Two things make this the most instructive instance yet. First, the
+    rule's *instinct* was right and its *example* was wrong, so a reader checking the conclusion
+    rather than the reasoning would have found nothing — and the real failure branches (an unknown
+    variant name presenting identically to a broken FEN, `Fischerandom` silently becoming standard
+    chess) were both invisible from the armchair. Second, **one of my own fixtures corroborated the
+    false premise**: an Antichess game whose moves were not legal Antichess truncated at ply 2,
+    exactly as the ADR predicted, for entirely the wrong reason. A fixture that fails for the wrong
+    reason is worse than one that fails for none, because it agrees with you.
     **The fourth one is different from the first three in a way worth recording.** The others
     were caught by measurement; this one was caught by the *owner disagreeing*, and it was the AI
     that had produced the unevidenced claim, inside a document whose whole purpose was to be more
@@ -626,27 +757,41 @@ Session 1:
 ## Next actions
 
 **Nothing is blocked and nothing is half-built.** M1 is closed and verified, ADR-0008 is accepted,
-and the four decisions taken this session are all recorded in the model rather than only in prose.
-The next task is B-099, and it is chosen deliberately over jumping to B-007.
+and there is now a harness that ADR-0008 can be tested against. The next task is B-099, and it is
+still chosen deliberately over jumping to B-007.
 
+**The Rust half was run in a real terminal and is fully green**, closing the one thing session 5
+could not verify itself: `cargo fmt` reformatted a single statement, `cargo test` reports
+`fixtures_contract.rs` passing, and `cargo clippy --all-targets -- -D warnings` is clean.
+**`Cargo.lock` did not move**, because `serde_json` was already in the graph, so the new
+`[dev-dependencies]` entry costs nothing and `--locked` still holds. **Every gate CI applies has
+therefore been run locally** — fmt, clippy, cargo test, typecheck, guardrails, frontend build and
+`npm test` — so session 5 is committable with nothing left on "should work". The only claim in it
+that a human has not personally checked is a visual one, and there are none: this session touched
+no UI. **Note that the Rust suite has not been re-run since B-099 grew the corpus from two fixtures
+to eighteen** — `fixtures_contract.rs` iterates the manifest, so it should simply assert more, but
+that sentence is a prediction and not a result.
 
-**M1 is fully closed and nothing is outstanding from it. B-049 is drafted as ADR-0008.**
-
-1. **B-099 — the malformed-PGN fixture corpus, before B-007 rather than after.** ADR-0008 is
-   seven rules and currently zero evidence; the fixtures are what turn it from a document into
-   something that can fail. It is also the cheapest moment: fixtures written against a policy
-   test the policy, whereas fixtures written against a finished importer tend to be the ones the
-   importer already passes. Same reasoning as the negative control that validated
-   `check:i18n` — and the same trap as the session-3 near-miss, where a fixture appeared to
-   expose a walker bug and was itself wrong. **Verify the fixture before believing the failure.**
-2. **B-007 — PGN import.** Large tier, so it needs a feature spec via `ai/prompts/feature.md`
-   before code. Mostly Rust, therefore mostly unverifiable in the AI sandbox — plan for that split
-   explicitly rather than discovering it again.
-3. Then **B-011 — persistence**, where the ADR-0005 migration finally gets written and now carries
+1. **B-007 — PGN import, and it is the next real build.** Everything in front of it is now closed:
+   ADR-0008 is accepted *and* amended, the fixture corpus exists, and the two rules most likely to
+   have been implemented wrongly have been corrected before any code was written. **Large tier, so it
+   needs a feature spec via `ai/prompts/feature.md` first.** Three things the spec must carry that
+   were not knowable a session ago: `src-tauri/Cargo.toml` needs `shakmaty`'s `variant` feature;
+   the importer must select the variant from the tag rather than inheriting a default; and there is
+   **no content key and no dedupe** — stable row IDs only. Mostly Rust, therefore mostly unverifiable
+   in the AI sandbox: plan that split explicitly rather than rediscovering it.
+2. **B-113 — done (session 5).** ADR-0008's addendum is accepted: rule 3b superseded, rule 6 out of
+   the MVP. Read the addendum before implementing either.
+3. **B-099 — done (session 5).** ADR-0008 went from seven rules and zero evidence to seven rules
+   and eighteen fixtures, of which the three interesting ones contradict it. The reason to do this
+   before B-007 held up exactly as argued: fixtures written against a *policy* test the policy,
+   whereas fixtures written against a finished importer tend to be the ones the importer already
+   passes. Remaining work sits in B-007 (assert `disposition` and `warnings`) and B-098.
+4. Then **B-011 — persistence**, where the ADR-0005 migration finally gets written and now carries
    four things this session added: ADR-0008's disposition and warning columns, `ecoUrl`, and the
    two accuracy columns; then **B-008 / B-010** — the real table and search, where TanStack arrives
    and B-033's 200 ms target becomes measurable.
-4. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
+5. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
    the B-067 throttling rule across from `tech-stack.md`. The source layout is already recorded
    there, so this file is about component boundaries and data flow rather than directories.
 
@@ -654,13 +799,20 @@ The next task is B-099, and it is chosen deliberately over jumping to B-007.
 
 Neither of these blocks anything above; both make later work better-founded.
 
-- **B-101 — point the survey at loose PGN files.** `npm run survey:pgn -- <path>`, plain first to
-  read it, `--redact` for anything pasted into the repo. The chess.com corpus is already measured
+- **B-101 — point the survey at loose PGN files.** `npm run survey:pgn -- <path>`; the output is
+  safe to paste as-is, since paths print relative to the input. The chess.com corpus is already measured
   and recorded, and it is a *clean-source* sample: it told us the tag surface and nothing about the
   malformed tail, which is what ADR-0008 rules 4 and 5 exist for. **The number to read first is
   same-file content-key collisions**, the only direct evidence about rule 6 — cross-file collisions
   are the rule working as intended on overlapping exports, same-file ones are candidate false merges
   and want eyeballing individually. The downloaded chess.com data sits in `local/pgn/` (untracked).
+  **The chess.com half was run in session 5 and the numbers are in B-101's backlog entry** — 100%
+  UTF-8, every date complete, zero anomalies of any kind, 0 same-file collisions and 25 cross-file
+  ones that are each a game matching across its own JSON and PGN copies. That last figure is
+  better rule-6 evidence than the synthetic fixture, because the two representations are genuinely
+  different serialisations rather than the same text rewrapped. **What it cannot tell us**: rule 3b
+  is untested rather than confirmed, since the account has no variant games, and nothing here
+  exercises rules 4 or 5. The loose files are the remaining half and the interesting one.
 - **B-031 — check the GitHub side before treating the repo as safely public.** Visibility,
   description, topics, the account profile. The session-3 privacy scan covered the repository and
   cannot see any of that.
@@ -794,6 +946,17 @@ doing it, not a reason to slow down.
   own code, or a plan rests on how often something happens, find the control *first*. The most
   instructive one was the smallest — four games missing a JSON field all looked like "unrated daily
   games omit `eco`", and thirteen other unrated daily games had it.
+- **`npm test` is the fourth check, alongside `typecheck`, `check:i18n` and `build`** (B-106).
+  Tests sit beside the code they test (`mainline.test.ts`); the shared PGN corpus is `fixtures/`,
+  which is at the repository root because neither language owns it. Read `fixtures/README.md`
+  before adding a fixture — invented names only, and every entry needs an `expected.json` row.
+- **A lesson for this file rather than for the code: "verified against fixtures" is a claim about a
+  moment unless the fixtures are committed.** Two entries in this handover said exactly that, both
+  truthfully, and the project still had no test runner in session 5. **Prose cannot distinguish
+  between a test suite and a script that was run once**, so from now on say which — and if a check
+  was performed by something that no longer exists, say that too. This is the same species as
+  session 4's unmeasured frequency claim: a sentence that reads like evidence and is really a
+  memory. Worth backporting to the starter kit (B-088).
 - **Start the next session with `ai/prompts/session-start.md`.** This file plus `docs/backlog.md`
   should be sufficient — if the next session has to ask something that was settled here, this
   handover failed and is worth fixing rather than working around.

@@ -14,28 +14,47 @@
  * ADR-0008 rule 6, and a *count* of them tests nothing — judging whether two colliding games are
  * the same game means looking at them.
  *
- * `--redact` exists for one narrow reason, and it is not about PGN or about the players in it.
- * This output is meant to be pasted into `docs/backlog.md`, and the developer's own handle
- * appears in every White/Black field of their own games. The repo's commit identity is
- * deliberately pseudonymous; pasting the handle in would undo that. So `--redact` protects the
- * repo's anonymity, not the games.
+ * **There is no redaction mode, and getting to that took three corrections.** Successive drafts
+ * hid player names, then hid them behind a flag, then justified the flag by the repo's pseudonymous
+ * identity. All of it was aimed at the wrong target. Game data is not sensitive: online games are
+ * already public, the account handle is the repo's own name, and opponents' names carry nothing the
+ * developer needs protected.
+ *
+ * **The one thing in this output that is developer footprint is the absolute path**, because a home
+ * directory contains a real name. That is handled structurally rather than by a mode: paths are
+ * printed relative to the scanned root, so the home directory never appears and there is no flag to
+ * remember. Shorter output too.
  *
  * Usage:
- *   node scripts/survey-pgn.mjs <path> [<path>...] [--redact]
+ *   node scripts/survey-pgn.mjs <path> [<path>...]
  *
- * A path may be a .pgn file or a directory, which is searched recursively.
+ * A path may be a .pgn or .json file, or a directory, which is searched recursively.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { extname, join } from "node:path";
+import { basename, extname, isAbsolute, join, relative } from "node:path";
 
 const args = process.argv.slice(2);
-const REDACT = args.includes("--redact");
 const inputs = args.filter((a) => !a.startsWith("--"));
 
 if (inputs.length === 0) {
-  console.error("usage: node scripts/survey-pgn.mjs <file-or-dir>... [--redact]");
+  console.error("usage: node scripts/survey-pgn.mjs <file-or-dir>...");
   process.exit(2);
+}
+
+/**
+ * Shorten a path for display, so no home directory reaches the output.
+ *
+ * Relative to the scanned input when the file sits underneath it, and bare filename otherwise.
+ * This is the only privacy measure in the script and it is the only one warranted: a home
+ * directory contains a real name, whereas the games do not contain anything worth hiding.
+ */
+function displayPath(file) {
+  for (const input of inputs) {
+    const rel = relative(input, file);
+    if (rel !== "" && !rel.startsWith("..") && !isAbsolute(rel)) return rel;
+  }
+  return basename(file);
 }
 
 /** The Seven Tag Roster — the only tags PGN actually requires. */
@@ -88,9 +107,10 @@ if (files.length === 0) {
 }
 
 /**
- * A chess.com monthly archive is JSON, and it is a **superset** of that month's PGN endpoint:
- * each game object carries `pgn` plus fields the PGN does not have — `accuracies`, `rules`
- * (the variant), `time_class`, `url`.
+ * A chess.com monthly archive is JSON. Each game object carries `pgn` plus fields the PGN does not
+ * have — `accuracies`, `rules` (the variant), `time_class`, `uuid`, `tcn`, `rated`. **It is not a
+ * superset, though: the PGN tags carry `Event`, `Site`, `Round`, `Termination` and the ECO code,
+ * none of which appear in the JSON** (B-102). Neither representation contains the other.
  *
  * The reason this script reads it is one specific question it can answer and the PGN cannot.
  * ADR-0008 rule 3b decides what to do about variants **by reading the PGN `Variant` tag.** If
@@ -301,7 +321,7 @@ for (const [fileIndex, file] of files.entries()) {
     stats.bytes -= bytes.length;
     stats.encodings.set(encoding, (stats.encodings.get(encoding) ?? 1) - 1);
     if (stats.encodings.get(encoding) === 0) stats.encodings.delete(encoding);
-    stats.skipped.push(REDACT ? `file (index withheld)` : file);
+    stats.skipped.push(displayPath(file));
     continue;
   }
 
@@ -410,7 +430,7 @@ for (const [fileIndex, file] of files.entries()) {
     games: fileGames,
     kb: Math.round(bytes.length / 102.4) / 10,
     encoding,
-    file,
+    path: displayPath(file),
   });
 }
 
@@ -439,8 +459,8 @@ function describeCollisions(entries, limit = 12) {
   for (const [key, games] of entries.slice(0, limit)) {
     lines.push(`    key ${key.slice(0, 12)} — ${games.length} games`);
     for (const g of games) {
-      const who = REDACT ? "(redacted)" : `${g.white} vs ${g.black}`;
-      const where = REDACT ? "" : ` · ${g.event} · ${g.site}`;
+      const who = `${g.white} vs ${g.black}`;
+      const where = ` · ${g.event} · ${g.site}`;
       lines.push(
         `      file ${g.fileIndex} game ${g.gameIndex}: ${g.plies} plies · ` +
           `${g.date} · R${g.round} · ${g.result} · ${g.extraTags} tags · ${who}${where}`,
@@ -473,7 +493,7 @@ const extraTags = new Map(
 console.log(`
 PGN survey — B-101
 ==================
-${REDACT ? "Redacted: names and paths withheld so this can go into the repo without carrying your handle." : "Full detail — the mode for reading. Use --redact for output you intend to commit."}
+Paths are shown relative to the scanned input, so no home directory appears here.
 
 Corpus
     files                    ${String(stats.files).padStart(7)}
@@ -552,6 +572,6 @@ ${describeCollisions(crossFile)}
 
 ${stats.skipped.length === 0 ? "" : `Skipped — JSON that is not a chess.com archive\n${stats.skipped.map((s) => `    ${s}`).join("\n")}\n`}
 Per file
-    idx    games      KB  encoding    ${REDACT ? "" : "path"}
-${stats.perFile.map((f) => `    ${String(f.index).padStart(3)} ${String(f.games).padStart(8)} ${String(f.kb).padStart(7)}  ${f.encoding.padEnd(16)}${REDACT ? "" : f.file}`).join("\n")}
-${REDACT ? "" : "\nRun with --redact if you intend to paste any of this into the repo."}`);
+    idx    games      KB  encoding          path
+${stats.perFile.map((f) => `    ${String(f.index).padStart(3)} ${String(f.games).padStart(8)} ${String(f.kb).padStart(7)}  ${f.encoding.padEnd(16)}${f.path}`).join("\n")}
+`);

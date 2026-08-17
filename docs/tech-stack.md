@@ -142,14 +142,18 @@ established layout is a hard stop.
 /
 ├── index.html              vite entry
 ├── package.json            SPDX GPL-3.0-or-later (B-065)
+├── fixtures/               PGN corpus shared by both languages — see fixtures/README.md
+│   └── pgn/                fixture files + expected.json (ADR-0008 dispositions)
 ├── scripts/
-│   └── check-no-literals.mjs   CI guardrail for B-072 + the IPC boundary
+│   ├── check-no-literals.mjs   CI guardrail for B-072 + the IPC boundary
+│   └── survey-pgn.mjs      the B-101 instrument; reads .pgn and chess.com .json
 ├── src/                    React frontend
 │   ├── main.tsx            root render; imports chessground stylesheets
 │   ├── App.tsx             shell: tab state, kept deliberately thin (ADR-0007)
 │   ├── features/           grouped by feature, not by file type
 │   │   ├── board/          BoardView + useChessground (the vanilla-DOM escape hatch)
 │   │   ├── game/           GameView, GameInfo, mainline.ts (PGN → a FEN per ply)
+│   │   │                   plus mainline.test.ts — tests sit beside what they test
 │   │   ├── library/        LibraryView — filter bar and full-width games table
 │   │   ├── moves/          MoveList
 │   │   └── shell/          TabBar (document tabs) + SidePanel (the fixed column)
@@ -160,7 +164,8 @@ established layout is a hard stop.
 └── src-tauri/              Rust side, standard Tauri 2 lib/bin split
     ├── Cargo.toml          SPDX GPL-3.0-or-later (B-065)
     ├── icons/icon.png      must exist or the build fails in a proc macro
-    └── src/{main,lib}.rs
+    ├── src/{main,lib}.rs
+    └── tests/              cargo integration tests (fixtures_contract.rs)
 ```
 
 Three boundaries in that tree are load-bearing rather than tidy:
@@ -193,6 +198,38 @@ JSX delimiters. Worth recording because the lesson generalises: **a guardrail th
 gets switched off**, which is worse than not having one. It was also verified with a negative
 control — a deliberately planted literal, confirmed to fail the check — which is the B-077
 habit applied to something other than a benchmark.
+
+## Test harness (established at B-106, session 5)
+
+**vitest 4 for TypeScript, `cargo test` for Rust, one shared fixture corpus at `fixtures/`.**
+Notify-and-proceed: vitest is a small, conventional dev dependency, MIT-licensed, reversible in an
+afternoon, and the alternative was continuing to have no runner at all.
+
+Four sessions in, the project had **no test infrastructure of any kind** — and it did not read that
+way from the outside, because both `mainline.ts` and `survey-pgn.mjs` were described in the
+handover as "verified against fixtures". Both were: by throwaway scripts, run once, discarded. That
+is verification of a moment rather than of the code, and the backlog item that exposed it was B-099,
+which reads as ready to start and rests on a harness nobody had noticed was missing.
+
+- `npm test` → `vitest run`. Environment `node`, not `jsdom`: what needs testing is pure logic.
+  Component tests need a DOM and a renderer, and neither has earned its place yet.
+- `globals: false`, so `describe`/`test`/`expect` are imported explicitly and typechecked like any
+  other import.
+- `defineConfig` is imported from `vitest/config` in `vite.config.ts` rather than adding a second
+  config file. The reason is the `@` alias: tests must resolve imports exactly as the app does, and
+  an alias defined twice is an alias that eventually disagrees with itself.
+- CI runs `npm test` in the frontend job and `cargo test --locked` on **all three** platforms —
+  unlike `fmt` and `clippy`, which are Linux-only. The Rust suite currently asserts a relative path
+  resolves, which is exactly the class of thing that diverges on Windows (B-069).
+
+### Why the fixture corpus lives at the repository root
+
+`fixtures/` is deliberately outside both `src/` and `src-tauri/`, because neither language owns it.
+ADR-0008 rule 3 has `shakmaty` and `chessops` walking the same mainline, and B-064 is the risk that
+they quietly disagree. A corpus copied per language cannot detect that: the copies drift and each
+side keeps passing its own tests. One corpus, one `expected.json`, two readers asserting the same
+`truncatedAtPly` is the cheapest available form of that check. `fixtures/README.md` carries the
+contract; the corpus itself is B-099.
 
 ## Notes
 
