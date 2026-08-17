@@ -216,3 +216,19 @@ becomes optional or deferred, and nothing else in this ADR moves.
   claim in the first place).
 - **Not decided here:** what the import UI looks like, and how a quarantined game is re-run after
   a parser improvement. Both are B-097.
+- **A limit on this ADR's scope, found after drafting and then measured: it assumes PGN is the raw
+  thing.** True for file import. For API import (B-012/B-013) there is no single raw thing —
+  **chess.com's monthly JSON and its `/pgn` endpoint each carry fields the other does not.** An
+  earlier version of this note claimed the JSON was a superset; that was wrong, and measuring a
+  real account is what corrected it. JSON-only: `uuid`, `rules`, `accuracies`, `tcn`, `rated`,
+  `time_class`, `initial_setup`. PGN-tag-only: `Event`, `Site`, `Round`, `Termination`, `Timezone`,
+  `UTCDate`/`UTCTime`, `EndDate`, **and the ECO code** — the JSON's `eco` field is an opening *URL*,
+  not `C50`.
+  **Resolved for chess.com, recorded in B-102, and it does not disturb this ADR:** the JSON `pgn`
+  field holds a complete per-game PGN, so B-012 unwraps the JSON and feeds each game's PGN through
+  the same pipeline rule 1 already describes, taking only `uuid`, `rules` and `accuracies` from the
+  JSON. One derivation path, not two.
+  **Rule 6 is improved for that source rather than merely preserved.** Its content hash exists
+  because file PGN has no identity; chess.com supplies a stable `uuid`, so API-sourced games key on
+  that and the false-merge risk this ADR accepted **does not apply to them at all**. Files keep the
+  content hash. Rule 3b also stops being blind, because `rules` is read directly.

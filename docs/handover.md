@@ -360,16 +360,57 @@ Session 4:
 - **Risk 9 updated**: measurement has now overturned reasoning three times, and the rule was
   written down rather than left as three anecdotes.
 - **B-049 closed as ADR-0008 — the PGN import fidelity policy**, the last thing standing in
-  front of B-007. **Raised B-097 – B-101.** Written up under "Decided" below, because the
+  front of B-007. **Raised B-097 – B-102.** Written up under "Decided" below, because the
   reasoning matters more than the outcome.
+- **B-102 — the chess.com import shape, decided from measurement rather than documentation.**
+  A real account (25 games, 20 archive months, 7 of them empty) was downloaded and inspected, and
+  it corrected two things I had asserted. **Import uses the monthly JSON**, and the `pgn` field
+  holds a complete per-game PGN, so the `/pgn` endpoint is redundant — verified by comparing all 13
+  non-empty months, which carry the identical set of games. *Incidental but load-bearing: game order
+  differs between the two representations in 5 of 13 months, so position-in-file can never be part
+  of an identity.*
+  **My "the JSON is a superset of the PGN" claim was wrong** — neither contains the other. JSON-only:
+  `uuid`, `rules`, `accuracies`, `tcn`, `rated`, `time_class`, `initial_setup`. PGN-tag-only:
+  `Event`, `Site`, `Round`, `Termination`, `Timezone`, `UTCDate`/`UTCTime`, `EndDate`, **and the ECO
+  code** — the JSON `eco` field turns out to be an opening *URL*, so `C50` exists only as a PGN tag.
+  That knocks out four ADR-0005 hot fields if you parse JSON alone.
+  **Two decisions.** Hot fields derive from the **PGN tags**, by unwrapping the JSON and feeding each
+  game's `pgn` through B-007's pipeline, with only `uuid`, `rules` and `accuracies` taken from JSON —
+  one derivation path rather than two with a precedence rule. And **dedupe identity is per source:
+  `uuid` for API games, the content hash for files.**
+  **That second one is the best thing to come out of the whole B-049 thread.** ADR-0008 rule 6's
+  content hash exists *only* because file PGN has no identity, and it was the rule flagged as
+  highest-regret because it can silently merge two distinct games. chess.com supplies a stable
+  `uuid`, so **for API-sourced games that risk is not mitigated, it is absent.** Rule 3b also stops
+  being blind, since `rules` is read directly instead of inferred from a tag chess.com may not emit.
+  Accepted cost: a game arriving by both API and file export can import twice, since the two keys
+  cannot see each other — a visible, removable duplicate in exchange for a silent false merge.
+  Raised **B-103** (the result vocabulary is per-player and richer than `1-0`, but the sample has no
+  draws, so the draw strings are unobserved — do not guess them) and **B-104** (whether to store
+  `accuracies` at all, given it is another engine's derived output that we cannot reproduce).
 - **`scripts/survey-pgn.mjs` written and tested — the instrument for B-101.** Dependency-free
-  Node; `npm run survey:pgn -- <path>`. **It reports counts and shapes only — no player names, no
-  game text, no filenames — so its output is safe to paste into a public repo**, which is the
-  design constraint that shaped it rather than an afterthought. Verified against synthetic
-  fixtures covering every metric, **with a negative control** (a clean lichess-shaped file reports
-  no anomalies) and a robustness pass (random binary, empty file, truncated tags, unbalanced
-  parens — no crash, no hang). The negative-control habit is now three for three on this project:
-  `check:i18n`, B-048's plain-browser baseline, and this.
+  Node; `npm run survey:pgn -- <path>`, with `--redact` for output destined for the repo.
+  Verified against synthetic fixtures covering every metric and both collision paths, **with a
+  negative control** (a clean lichess-shaped file reports no anomalies) and a robustness pass
+  (random binary, empty file, truncated tags, unbalanced parens — no crash, no hang). The
+  negative-control habit is now three for three: `check:i18n`, B-048's plain-browser baseline,
+  and this.
+  **Built redacted-by-default and inverted, in two corrections from the owner.** Cost of the
+  original framing: hiding identifying detail broke the tool's most useful output, because rule 6
+  is a judgement and a *count* of collisions cannot test a judgement — you have to look at the two
+  games. The report now prints each colliding pair game by game.
+  **The scope of the privacy constraint, stated correctly, because it was over-read twice:** it
+  covers the *developer's* footprint — commit identity, home paths, secret-shaped strings — which
+  is what the session-3 scan actually looked for. **Third-party game data is not in scope.**
+  `--redact` survives on the narrow version of that rule: the owner's own handle appears in every
+  White/Black field of their own games, and the per-repo identity is deliberately pseudonymous, so
+  pasting survey output in unredacted would undo it.
+  **Worth noticing, since it happened twice in one session:** an over-general safety framing
+  displaced a specific engineering requirement, and both times following the objection through
+  produced something better than conceding would have — B-100 first, the collision report second.
+  Also worth noticing: the first two attempts to write this entry were longer than the finding
+  justified. Three paragraphs of self-examination in a handover is a cost paid by every future
+  session that has to read it.
   **One result from the fixtures is worth keeping, because it validates rule 6's design rather
   than merely exercising it:** a game re-exported with different line wrapping, stripped clock
   comments and four fewer tags produced an *identical* content key to the original. That is
@@ -554,8 +595,9 @@ Session 1:
    of something already decided.
 2. **B-101 — run the survey on your real exports. The instrument is built and tested; only the
    data is missing.** `npm run survey:pgn -- ~/path/to/pgn` (or a directory). It prints counts and
-   shapes only — no names, no game text, no filenames — so the output can be pasted straight into
-   the backlog. Promoted above the fixture corpus deliberately: it settles the frequency argument
+   shapes with full detail by default, and `--redact` strips names and paths for anything going into
+   the backlog — run it plain first to read it, then `--redact` if you want to paste any of it in.
+   Promoted above the fixture corpus deliberately: it settles the frequency argument
    with data instead of confidence, and it tells B-099 which fixtures are worth writing.
    **The number to look at first is same-file content-key collisions**, because that is the only
    direct evidence about rule 6, the highest-regret rule in ADR-0008. Cross-file collisions are

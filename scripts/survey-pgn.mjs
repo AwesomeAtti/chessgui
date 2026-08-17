@@ -9,16 +9,19 @@
  * It is a measuring instrument, not product code. It does not import, does not write, and
  * knows nothing about the database. Run it, paste the output into the backlog, delete nothing.
  *
- * **Privacy is the load-bearing design constraint here, not a nicety.** The input is the
- * owner's real games, with real names in them, and the output is meant to be pasted into a
- * public repository. So this script reports *shapes and counts only*: tag names but never tag
- * values, move counts but never moves, file indexes but never filenames. The one exception is
- * an explicit `--unsafe-names` flag for reading locally, which prints values and is never to
- * be used for anything that gets committed. Everything about the default output is intended to
- * be boring enough to publish.
+ * **Full detail by default.** An earlier version printed aggregates only, which broke the most
+ * useful thing here: same-file content-key collisions are the only direct evidence about
+ * ADR-0008 rule 6, and a *count* of them tests nothing — judging whether two colliding games are
+ * the same game means looking at them.
+ *
+ * `--redact` exists for one narrow reason, and it is not about PGN or about the players in it.
+ * This output is meant to be pasted into `docs/backlog.md`, and the developer's own handle
+ * appears in every White/Black field of their own games. The repo's commit identity is
+ * deliberately pseudonymous; pasting the handle in would undo that. So `--redact` protects the
+ * repo's anonymity, not the games.
  *
  * Usage:
- *   node scripts/survey-pgn.mjs <path> [<path>...] [--unsafe-names]
+ *   node scripts/survey-pgn.mjs <path> [<path>...] [--redact]
  *
  * A path may be a .pgn file or a directory, which is searched recursively.
  */
@@ -27,11 +30,11 @@ import { createHash } from "node:crypto";
 import { extname, join } from "node:path";
 
 const args = process.argv.slice(2);
-const UNSAFE_NAMES = args.includes("--unsafe-names");
+const REDACT = args.includes("--redact");
 const inputs = args.filter((a) => !a.startsWith("--"));
 
 if (inputs.length === 0) {
-  console.error("usage: node scripts/survey-pgn.mjs <file-or-dir>... [--unsafe-names]");
+  console.error("usage: node scripts/survey-pgn.mjs <file-or-dir>... [--redact]");
   process.exit(2);
 }
 
@@ -69,8 +72,9 @@ function collect(path, out) {
   const st = statSync(path);
   if (st.isDirectory()) {
     for (const entry of readdirSync(path)) collect(join(path, entry), out);
-  } else if (extname(path).toLowerCase() === ".pgn") {
-    out.push(path);
+  } else {
+    const ext = extname(path).toLowerCase();
+    if (ext === ".pgn" || ext === ".json") out.push(path);
   }
   return out;
 }
@@ -79,8 +83,39 @@ const files = [];
 for (const input of inputs) collect(input, files);
 
 if (files.length === 0) {
-  console.error("no .pgn files found");
+  console.error("no .pgn or .json files found");
   process.exit(1);
+}
+
+/**
+ * A chess.com monthly archive is JSON, and it is a **superset** of that month's PGN endpoint:
+ * each game object carries `pgn` plus fields the PGN does not have — `accuracies`, `rules`
+ * (the variant), `time_class`, `url`.
+ *
+ * The reason this script reads it is one specific question it can answer and the PGN cannot.
+ * ADR-0008 rule 3b decides what to do about variants **by reading the PGN `Variant` tag.** If
+ * chess.com signals a variant only in the JSON `rules` field and omits the tag from the PGN, then
+ * rule 3b is blind to chess.com variants and would report them as illegal moves instead — the
+ * exact misdiagnosis rule 3b exists to prevent. Comparing the two per game settles it with
+ * evidence, which is the only currency this project accepts for a claim like that.
+ *
+ * Returns null for JSON that is not a chess.com archive, so an unrelated file is skipped rather
+ * than crashing the run.
+ */
+function readChessComArchive(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (parsed === null || !Array.isArray(parsed.games)) return null;
+  return parsed.games.map((g) => ({
+    pgn: typeof g.pgn === "string" ? g.pgn : "",
+    rules: typeof g.rules === "string" ? g.rules : null,
+    hasAccuracies: g.accuracies !== undefined && g.accuracies !== null,
+    timeClass: typeof g.time_class === "string" ? g.time_class : null,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +259,19 @@ const stats = {
   notationEvidence: new Map(),
   plyCounts: [],
   perFile: [],
+
+  // chess.com JSON only — the fields the /pgn endpoint discards.
+  jsonGames: 0,
+  jsonRules: new Map(),
+  jsonWithAccuracies: 0,
+  jsonTimeClasses: new Map(),
+  /** Non-standard `rules` in the JSON but no `Variant` tag in the PGN — ADR-0008 rule 3b blind. */
+  variantOnlyInJson: 0,
+  /** Non-standard `rules` *and* a `Variant` tag — rule 3b sees it. */
+  variantInBoth: 0,
+
+  /** JSON files that were not chess.com archives, reported rather than silently ignored. */
+  skipped: [],
 };
 
 const keyIndex = new Map();
@@ -240,7 +288,48 @@ for (const [fileIndex, file] of files.entries()) {
   stats.bytes += bytes.length;
   bump(stats.encodings, encoding);
 
-  const games = splitGames(text);
+  // A chess.com archive supplies the PGN per game, along with the metadata the PGN lacks.
+  // Anything else — including JSON that is not an archive — goes through the text splitter.
+  const isJson = extname(file).toLowerCase() === ".json";
+  const archive = isJson ? readChessComArchive(text) : null;
+
+  // JSON that is not a chess.com archive is not game data. Skip it rather than letting the text
+  // splitter treat it as a headerless fragment and inflate the counts — this is a measuring
+  // instrument, so a wrong count is worse than a missing one.
+  if (isJson && archive === null) {
+    stats.files -= 1;
+    stats.bytes -= bytes.length;
+    stats.encodings.set(encoding, (stats.encodings.get(encoding) ?? 1) - 1);
+    if (stats.encodings.get(encoding) === 0) stats.encodings.delete(encoding);
+    stats.skipped.push(REDACT ? `file (index withheld)` : file);
+    continue;
+  }
+
+  const games = [];
+  if (archive !== null) {
+    for (const entry of archive) {
+      stats.jsonGames += 1;
+      if (entry.rules !== null) bump(stats.jsonRules, entry.rules);
+      if (entry.hasAccuracies) stats.jsonWithAccuracies += 1;
+      if (entry.timeClass !== null) bump(stats.jsonTimeClasses, entry.timeClass);
+
+      const split = splitGames(entry.pgn);
+      const game = split[0] ?? { tagLines: [], moveLines: [] };
+
+      // The rule 3b question, per game: does the PGN admit to the variant the JSON declares?
+      const nonStandard = entry.rules !== null && entry.rules !== "chess";
+      if (nonStandard) {
+        const taggedVariant = game.tagLines.some((l) => /^\s*\[\s*Variant\s/.test(l));
+        if (taggedVariant) stats.variantInBoth += 1;
+        else stats.variantOnlyInJson += 1;
+      }
+
+      games.push(game);
+    }
+  } else {
+    games.push(...splitGames(text));
+  }
+
   let fileGames = 0;
 
   for (const game of games) {
@@ -293,10 +382,27 @@ for (const [fileIndex, file] of files.entries()) {
     }
 
     // Rule 6's actual load: how often does one content key cover more than one game?
+    //
+    // The identifying details are retained deliberately. A count of collisions cannot tell you
+    // whether the rule is working or silently merging two different games — only looking at the
+    // colliding pair can, so the report has to be able to show it.
     const key = contentKey(tags, san);
+    const entry = {
+      fileIndex,
+      gameIndex: fileGames,
+      plies: san.length,
+      white: tags.White ?? "?",
+      black: tags.Black ?? "?",
+      event: tags.Event ?? "?",
+      date: tags.Date ?? "?",
+      round: tags.Round ?? "?",
+      result: tags.Result ?? "?",
+      site: tags.Site ?? "?",
+      extraTags: Object.keys(tags).length,
+    };
     const prior = keyIndex.get(key);
-    if (prior === undefined) keyIndex.set(key, [{ fileIndex }]);
-    else prior.push({ fileIndex });
+    if (prior === undefined) keyIndex.set(key, [entry]);
+    else prior.push(entry);
   }
 
   stats.perFile.push({
@@ -304,19 +410,48 @@ for (const [fileIndex, file] of files.entries()) {
     games: fileGames,
     kb: Math.round(bytes.length / 102.4) / 10,
     encoding,
-    ...(UNSAFE_NAMES ? { file } : {}),
+    file,
   });
 }
 
 // ---------------------------------------------------------------------------
-// Report — counts and shapes only
+// Report
 // ---------------------------------------------------------------------------
 
-const collisions = [...keyIndex.values()].filter((v) => v.length > 1);
-const sameFileCollisions = collisions.filter(
-  (v) => new Set(v.map((e) => e.fileIndex)).size === 1,
-).length;
-const crossFileCollisions = collisions.length - sameFileCollisions;
+const collisions = [...keyIndex.entries()].filter(([, v]) => v.length > 1);
+const sameFile = collisions.filter(
+  ([, v]) => new Set(v.map((e) => e.fileIndex)).size === 1,
+);
+const crossFile = collisions.filter(
+  ([, v]) => new Set(v.map((e) => e.fileIndex)).size > 1,
+);
+
+/**
+ * Show the games behind a set of colliding keys.
+ *
+ * This is the part the aggregate-only version could not do, and it is the reason the report
+ * exists: rule 6 is a *judgement* that identical roster tags plus identical moves mean the same
+ * game, and the only way to check a judgement is to look at the cases it decided.
+ */
+function describeCollisions(entries, limit = 12) {
+  if (entries.length === 0) return "    none";
+  const lines = [];
+  for (const [key, games] of entries.slice(0, limit)) {
+    lines.push(`    key ${key.slice(0, 12)} — ${games.length} games`);
+    for (const g of games) {
+      const who = REDACT ? "(redacted)" : `${g.white} vs ${g.black}`;
+      const where = REDACT ? "" : ` · ${g.event} · ${g.site}`;
+      lines.push(
+        `      file ${g.fileIndex} game ${g.gameIndex}: ${g.plies} plies · ` +
+          `${g.date} · R${g.round} · ${g.result} · ${g.extraTags} tags · ${who}${where}`,
+      );
+    }
+  }
+  if (entries.length > limit) {
+    lines.push(`    ... and ${entries.length - limit} more`);
+  }
+  return lines.join("\n");
+}
 
 function table(map, total) {
   return [...map.entries()]
@@ -338,8 +473,8 @@ const extraTags = new Map(
 console.log(`
 PGN survey — B-101
 ==================
-Counts and shapes only; no player names, game text, or filenames are printed.
-${UNSAFE_NAMES ? "\n!! --unsafe-names is ON: output contains real values. Do not commit it.\n" : ""}
+${REDACT ? "Redacted: names and paths withheld so this can go into the repo without carrying your handle." : "Full detail — the mode for reading. Use --redact for output you intend to commit."}
+
 Corpus
     files                    ${String(stats.files).padStart(7)}
     games                    ${String(stats.games).padStart(7)}
@@ -362,8 +497,29 @@ ${table(stats.dateKinds, stats.games)}
 Results (B-060 stores these as integers)
 ${table(stats.results, stats.games)}
 
-Variants (ADR-0008 rule 3b / B-100)
+Variants — from the PGN Variant tag (ADR-0008 rule 3b / B-100)
 ${stats.variants.size === 0 ? "    no Variant tag anywhere" : table(stats.variants, stats.games)}
+${
+  stats.jsonGames === 0
+    ? ""
+    : `
+chess.com JSON archive — the fields the /pgn endpoint discards
+    games from JSON          ${String(stats.jsonGames).padStart(7)}
+    with accuracies          ${String(stats.jsonWithAccuracies).padStart(7)}
+  rules (the variant, JSON-side)
+${table(stats.jsonRules, stats.jsonGames)}
+  time_class
+${table(stats.jsonTimeClasses, stats.jsonGames)}
+
+  ADR-0008 rule 3b depends on the PGN Variant tag. Does it exist for chess.com?
+    non-standard rules WITH a PGN Variant tag      ${String(stats.variantInBoth).padStart(6)}  <- rule 3b works
+    non-standard rules WITHOUT a PGN Variant tag   ${String(stats.variantOnlyInJson).padStart(6)}  <- rule 3b BLIND
+${
+  stats.variantOnlyInJson > 0
+    ? "\n    Non-zero above means rule 3b cannot see these variants from the PGN alone, and\n    would report them as illegal moves — the misdiagnosis rule 3b exists to prevent.\n    Fix is to carry the JSON `rules` field into import for the B-012 path (see B-102)."
+    : "\n    Zero above is the result rule 3b needs. If the rules table shows only \"chess\",\n    this account has no variant games and the question is untested rather than answered."
+}`
+}
 
 Movetext features
     with { comments }        ${String(stats.withAnyComment).padStart(7)}
@@ -381,16 +537,21 @@ ${stats.notationEvidence.size === 0 ? "    none — consistent with English SAN 
 Duplicate content keys (ADR-0008 rule 6 — the highest-regret rule)
     distinct keys            ${String(keyIndex.size).padStart(7)}
     keys covering >1 game    ${String(collisions.length).padStart(7)}
-      within a single file   ${String(sameFileCollisions).padStart(7)}   <- candidate FALSE merges
-      across files           ${String(crossFileCollisions).padStart(7)}   <- expected: overlapping exports
+      within a single file   ${String(sameFile.length).padStart(7)}   <- candidate FALSE merges
+      across files           ${String(crossFile.length).padStart(7)}   <- expected: overlapping exports
 
-    Cross-file collisions are the re-import case and are what the rule is for.
-    Same-file collisions are the ones worth eyeballing: one file listing a game
-    twice is plausible, but two genuinely different games sharing a key is the
-    failure mode ADR-0008 accepted on the grounds that it would be rare. This
-    number is the first evidence either way.
+  SAME-FILE collisions — read these individually. One file listing a game twice is
+  plausible; two genuinely different games sharing a key is the failure mode ADR-0008
+  accepted as rare. If the pairs below look like the same game, the rule holds.
+${describeCollisions(sameFile)}
 
+  CROSS-FILE collisions — the rule working as intended: the same game appearing in two
+  exports. Differing tag counts or ply counts here are the interesting part, because they
+  show the key surviving cosmetic differences, which is exactly why it is not a byte hash.
+${describeCollisions(crossFile)}
+
+${stats.skipped.length === 0 ? "" : `Skipped — JSON that is not a chess.com archive\n${stats.skipped.map((s) => `    ${s}`).join("\n")}\n`}
 Per file
-    idx    games      KB  encoding
-${stats.perFile.map((f) => `    ${String(f.index).padStart(3)} ${String(f.games).padStart(8)} ${String(f.kb).padStart(7)}  ${f.encoding}${f.file ? `  ${f.file}` : ""}`).join("\n")}
-`);
+    idx    games      KB  encoding    ${REDACT ? "" : "path"}
+${stats.perFile.map((f) => `    ${String(f.index).padStart(3)} ${String(f.games).padStart(8)} ${String(f.kb).padStart(7)}  ${f.encoding.padEnd(16)}${REDACT ? "" : f.file}`).join("\n")}
+${REDACT ? "" : "\nRun with --redact if you intend to paste any of this into the repo."}`);
