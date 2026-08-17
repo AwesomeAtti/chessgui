@@ -140,7 +140,10 @@ Deferring these is the point, not an oversight:
 - [ ] Accel+W closes the active tab, and the library tab has no close control
 - [ ] The on-screen move buttons in the panel footer
 - [ ] No document-level scrollbar at extreme window sizes — this is B-090's territory
-- [ ] CI green on all three platforms — cannot pass until the first push
+
+**CI is green on all three platforms**, plus formatting and lints, as of run `31982066850`.
+It took three runs: the first found a Windows-only missing `icon.ico`, the second confirmed the
+toolchain pin and the new fmt/clippy steps, the third passed clean.
 
 ## Notes
 

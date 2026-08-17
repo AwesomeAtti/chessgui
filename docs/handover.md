@@ -393,25 +393,23 @@ Session 1:
 
 ## Next actions
 
-1. **Check the CI run.** Session 3's push is the first time `.github/workflows/ci.yml` has ever
-   executed. Expect it to need a fix or two — that is what it is for. Windows and Linux
-   compiling is the only cross-platform guarantee this project currently has (B-046, B-068).
-2. **Tick the remaining M1 boxes** in `docs/milestones/m1-skeleton.md` — five minutes, and it
-   closes the milestone honestly rather than by assertion.
-3. **B-080** — add `cargo fmt --check` and clippy to CI, once `cargo fmt` has been run locally
-   at least once.
-4. **`docs/architecture.md`** — the remaining half of B-055. Carry the B-067 throttling rule
-   across from `tech-stack.md`. The layout is already recorded in `tech-stack.md`, so this file
-   is now about component boundaries and data flow rather than directories.
-5. **B-053 — core workflows.** Now genuinely on the critical path, because B-084 demonstrated
-   what happens without it. 4–6 end-to-end journeys, which is what should have produced the
-   screen list in the first place. Do this *before* B-008 and B-010 design their screens.
-6. **Then M2.** The critical path runs **B-049** (fidelity policy — must be written down before
-   any import code) → **B-007** (PGN import) → **B-011** (persistence, where the ADR-0005
-   migration is finally written) → **B-008/B-010** (list and search, where TanStack arrives).
+1. **Tick the remaining M1 boxes** in `docs/milestones/m1-skeleton.md` — five minutes with the
+   app open, and it closes the milestone honestly rather than by assertion. Nothing on that
+   list is expected to fail; it is simply unobserved.
+2. **B-049 — PGN import fidelity policy.** The first real M2 task, and the one B-007 cannot
+   start without: accept, repair, or reject malformed input, and what happens when a German
+   export carries `Sf3` instead of `Nf3` (B-073). Notify-and-proceed, but it must be written
+   down before any import code exists.
+3. **B-007 — PGN import**, then **B-011 — persistence**, where the ADR-0005 migration finally
+   gets written, then **B-008 / B-010** — the real table and search, where TanStack arrives and
+   B-033's 200 ms target becomes measurable.
+4. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
+   the B-067 throttling rule across from `tech-stack.md`. The source layout is already recorded
+   there, so this file is about component boundaries and data flow rather than directories.
 
-**The skeleton is written but has never run.** The next thing this project needs is not another
-decision — it is a window with a chessboard in it.
+**M1 is closed: the app runs, CI is green on three platforms, and everything is pushed.** The
+project's centre of gravity has moved from deciding to building, and the next thing it needs is
+the import path — the one part of the product that has to survive contact with real files.
 
 ## Notes for the next session
 
