@@ -83,6 +83,7 @@ Recorded as ADRs in [`docs/adr/`](docs/adr/):
 | Game data model | Players table · raw + parsed dates · full tag set as JSON | [ADR-0005](docs/adr/0005-game-data-model.md) |
 | Frontend framework | React 19 with Vite | [ADR-0006](docs/adr/0006-frontend-framework-react.md) |
 | Application layout | Pinned library tab · fluid board · fixed side panel | [ADR-0007](docs/adr/0007-application-layout.md) |
+| PGN import fidelity | Tiered per game, never per file · nothing discarded · warnings derived | [ADR-0008](docs/adr/0008-pgn-import-fidelity.md) *(proposed)* |
 
 ## Decisions pending
 

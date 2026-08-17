@@ -19,9 +19,10 @@ Tauri 2 + React 19 skeleton with a static board, a mock game list, and navigatio
 
 ## Current stage
 
-**Stage 3 — M1 skeleton, in progress.** All gates closed: ADR-0001 (Tauri 2), ADR-0002
-(GPL-3.0), ADR-0003 (chess libraries), ADR-0004 (SQLite), ADR-0005 (data model), ADR-0006
-(React 19).
+**Stage 3 — M1 skeleton complete and verified; M2 (import) is next.** All gates closed:
+ADR-0001 (Tauri 2), ADR-0002 (GPL-3.0), ADR-0003 (chess libraries), ADR-0004 (SQLite),
+ADR-0005 (data model), ADR-0006 (React 19), ADR-0007 (layout C+), and ADR-0008 (import
+fidelity, `proposed` — the only one not yet accepted).
 
 **The document-to-code ratio finally moved.** Session 3 wrote the first product code in the
 repository. Risk 5 is downgraded but not closed — see the risk register.
@@ -233,6 +234,39 @@ Session 3:
   window is the viewport**, which depends on `min-height: 0` on every ancestor of a scrolling
   region.
 
+Session 4:
+
+- **ADR-0008 — PGN import fidelity (B-049), status `proposed`.** The last thing standing in front
+  of B-007. **The framing in the question was the trap, and spotting it was most of the work.**
+  "Accept / repair / reject" sounds like three dispositions for a file, but ADR-0005 already
+  stores the verbatim PGN in the row, so **repair cannot corrupt and rejection cannot lose** — all
+  that is really being decided is how much *derived* understanding a partly-comprehensible game
+  gets, and how the shortfall reaches the user. Once restated that way the answer is close to
+  forced: be permissive, because permissiveness costs nothing in safety, *provided the shortfall
+  is recorded rather than swallowed*.
+  **Decision: tiered per game, and the file is never the unit of failure** — `clean` /
+  `imported`-with-warnings / `quarantined`-but-retained. A 3,000-game export with four damaged
+  games is not a damaged export. The disposition is itself **derived**, so a better parser next
+  year upgrades old rows on a rebuild for free; that property is free now and expensive later,
+  which is the same trade B-072 and B-069 were.
+  Four sub-decisions were hiding inside the question and are the substance of the ADR: legality
+  is validated but never blocks a row (and deliberately agrees with `mainline.ts`, which already
+  truncates); **notation language is a property of the file, decided once, never guessed per
+  token**; UTF-8 with a Latin-1 fallback and a record of which was used; and duplicate identity
+  as a content hash over the normalised game rather than over the bytes.
+  **The one to re-read before it hardens is the duplicate key** — it asserts that identical
+  players, event, date, round, result and moves mean the same game. Almost always true, not a
+  theorem, and the only rule here that can make a game the user expected go missing. Accepted
+  because a false merge is visible and recoverable, while duplicates accumulating on every
+  re-import are neither.
+  **A finding worth keeping even if the ADR changes:** the obvious way to handle localised SAN is
+  to try other languages when a token fails and accept whatever yields a legal move — and it is
+  silently unsafe, because **`R` is rook in English and *roi* (king) in French**. Where both a
+  rook and a king move to `d1` are legal, `Rd1` parses under either reading and means a different
+  game, so **legality cannot arbitrate**. That is B-098, and it is the same species of error as
+  the master–detail claim in session 3: an implementation that sounds obviously right and was
+  never checked against a real case.
+
 ## Process change made this session
 
 **UI layout is mocked and approved before it is coded.** Added to `AGENTS.md` (mandatory
@@ -305,6 +339,9 @@ Session 4:
   pointing at B-015.
 - **Risk 9 updated**: measurement has now overturned reasoning three times, and the rule was
   written down rather than left as three anecdotes.
+- **B-049 closed as ADR-0008 — the PGN import fidelity policy**, the last thing standing in
+  front of B-007. **Raised B-097 – B-099.** Written up under "Decided" below, because the
+  reasoning matters more than the outcome.
 
 Session 3:
 
@@ -391,9 +428,8 @@ Session 1:
 
 ## Open decisions
 
-- **B-049 — PGN import fidelity: accept / repair / reject malformed input.** Now the most
-  urgent open decision, because it is the one B-007 cannot start without. Interacts with B-073:
-  the policy has to say what happens when a German export contains `Sf3` instead of `Nf3`.
+- **B-049 — closed as ADR-0008, status `proposed` and awaiting your acceptance.** See the
+  session-4 write-up above for the substance. Nothing now blocks B-007.
 - **B-006 — Engine process management & UCI transport.** Escalates to a platform-surface
   commitment only if an engine binary is bundled. Not triggered by M1. The B-048 spike already
   demonstrated the transport half working (spawn, stdin/stdout, throttled emit, clean kill with
@@ -468,16 +504,26 @@ Session 1:
 
 ## Next actions
 
-**M1 is fully closed and nothing is outstanding from it.** The next action is the first M2 task.
+**M1 is fully closed and nothing is outstanding from it. B-049 is drafted as ADR-0008.**
 
-1. **B-049 — PGN import fidelity policy.** The first real M2 task, and the one B-007 cannot
-   start without: accept, repair, or reject malformed input, and what happens when a German
-   export carries `Sf3` instead of `Nf3` (B-073). Notify-and-proceed, but it must be written
-   down before any import code exists.
-3. **B-007 — PGN import**, then **B-011 — persistence**, where the ADR-0005 migration finally
-   gets written, then **B-008 / B-010** — the real table and search, where TanStack arrives and
-   B-033's 200 ms target becomes measurable.
-4. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
+1. **Read and accept (or amend) ADR-0008.** It is `proposed`, not `accepted`. The rule worth a
+   second look before it hardens is **rule 6, the duplicate-identity key** — the only rule in the
+   ADR that can lose a game the user expected to see, and a judgement rather than a consequence
+   of something already decided.
+2. **B-099 — the malformed-PGN fixture corpus, before B-007 rather than after.** ADR-0008 is
+   seven rules and currently zero evidence; the fixtures are what turn it from a document into
+   something that can fail. It is also the cheapest moment: fixtures written against a policy
+   test the policy, whereas fixtures written against a finished importer tend to be the ones the
+   importer already passes. Same reasoning as the negative control that validated
+   `check:i18n` — and the same trap as the session-3 near-miss, where a fixture appeared to
+   expose a walker bug and was itself wrong. **Verify the fixture before believing the failure.**
+3. **B-007 — PGN import.** Large tier, so it needs a feature spec via `ai/prompts/feature.md`.
+   Mostly Rust, therefore mostly unverifiable in the AI sandbox — plan for that split explicitly
+   rather than discovering it again.
+4. Then **B-011 — persistence**, where the ADR-0005 migration finally gets written and now also
+   carries ADR-0008's disposition and warning columns; then **B-008 / B-010** — the real table
+   and search, where TanStack arrives and B-033's 200 ms target becomes measurable.
+5. **`docs/architecture.md`** — the remaining half of B-055, whenever it earns its place. Carry
    the B-067 throttling rule across from `tech-stack.md`. The source layout is already recorded
    there, so this file is about component boundaries and data flow rather than directories.
 
