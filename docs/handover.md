@@ -768,8 +768,18 @@ doing it, not a reason to slow down.
   left behind by `git status`; `vite build` failing to empty an existing `dist/`; and, new this
   session, **in-place edits orphaning the original inode as `.fuse_hidden*`** — now covered by
   `.gitignore`, because the repo is public and a blind `git add` would have committed it. None of
-  these is a code problem and none should be "fixed" in the build config. Run git from a real
-  terminal.
+  these is a code problem and none should be "fixed" in the build config.
+- **The `index.lock` problem has an actual fix, and it replaces the previous advice.** Earlier
+  handovers said "the AI should avoid running git from the sandbox", which is discipline rather than
+  a mechanism, and it failed repeatedly in session 4 — including during the final verification pass,
+  stranding a lock that blocked the owner's own commit. **The mechanism is
+  `git --no-optional-locks`:** it skips the optional index refresh that writes `index.lock`, which is
+  the write the mount cannot undo. Verified in session 4 — `git --no-optional-locks status
+  --porcelain` returned correct output *while a stale lock was present* and created no new lock,
+  where plain `git status` emits `warning: unable to unlink .git/index.lock`. **Rule for the AI: read
+  git state only via `git --no-optional-locks <cmd>`. Writing commands (`add`, `commit`, `push`) stay
+  with the owner in a real terminal**, since those legitimately need the lock. Clearing a stranded
+  one is still `rm -f .git/index.lock`.
 - **`local/` holds the chess.com download** — 20 monthly JSON archives plus the redundant PGN
   copies, untracked and covered by `.gitignore`. Safe to delete; re-downloadable in a minute with
   the command in B-012's note. The `.pgn` files are genuinely redundant now that B-102 established
