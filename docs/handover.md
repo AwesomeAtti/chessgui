@@ -430,6 +430,15 @@ The kit is at 0.2.0.
   job rather than a refactor. Layout must tolerate ~35% text expansion.
 - **Read-only MVP must not become a read-only schema** (B-050). Header columns are derived;
   the verbatim PGN is the source of truth; rows carry stable IDs from the first migration.
+- **All PGN input is assumed to be English SAN** (ADR-0009, owner's decision session 5). PGN mandates
+  it and chess.com and lichess emit it. **The cost is a known issue, B-115, and it is the one place the
+  policy lets a *silently wrong* game into the library:** a German file imports as a game nobody
+  played. Measured — `pgn-reader` drops the tokens it cannot parse (`e4 e5 Sf3 Sc6 Lb5 a6` →
+  `e4 e5 a6`), `chessops` rewrites them (`e4 e5 f3 c6`), the two disagree, and neither reports
+  anything. Flagged for better error handling in a later release, and **the mechanism should be a
+  token-count comparison rather than language detection** — we do not need to know which language a
+  file is in, only that the parser silently discarded part of it, which is why B-115 is cheap where
+  B-098 was not.
 - **We do not delete PGN files, so the database is disposable** — drop it and import again.
   **That is the whole of it, and it replaces a much larger apparatus** (session 5). "Derivability"
   had acquired an owner (B-078, P1), a gate that "re-hardens", conditions quoted in two ADRs, and a

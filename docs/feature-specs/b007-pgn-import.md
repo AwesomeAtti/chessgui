@@ -35,8 +35,13 @@ From ADR-0009, because everything below is downstream of it:
 4. Variants are selected from the `Variant` tag — which in the MVP is entirely `chessops`' job,
    since the importer builds no position.
 
-**How many of the 18 fixtures will error at import? Unmeasured, and possibly none.** That is
-milestone 1's question. ADR-0009's "Accepted risks" table lists what the libraries tolerate.
+**Measured at milestone 1: `pgn-reader` refuses exactly 1 of the 18 fixtures** — `unterminated-comment`.
+Everything else imports, several files despite not conforming to the PGN specification. ADR-0009's
+"Accepted risks" table records each one, measured on both sides.
+
+**One stated assumption, which is a known issue rather than an oversight: all input is English SAN**
+(ADR-0009). A German or French file imports as a game nobody played and nothing reports it — flagged as
+**B-115** for better error handling in a later release.
 
 ## What this deletes from the previous plan
 
@@ -66,8 +71,8 @@ which reuses this pipeline per B-102).
 
 ## The error shape
 
-Probably a short section in practice, since milestone 1 may find that `pgn-reader` refuses almost
-nothing. Where an error does occur it carries
+A short section, as it turns out: milestone 1 measured exactly one refusal in eighteen fixtures. Where
+an error does occur it carries
 
 - the **file** it came from (once milestone 4 exists) and the **game's index** within it,
 - a stable **code** — never English, per B-072; the frontend composes the wording,
@@ -111,11 +116,10 @@ illegal move any more, because the importer does not look.
 
 **Risks**
 
-- **`pgn-reader`'s tokenizer behaviour is unmeasured**, and milestone 1 measures it.
-  B-099 found that `chessops` does not reject `Sf3` — it rewrites it to `f3`, a legal pawn move.
-  **The outcome does not change the policy**, since we accept the libraries' behaviour either way, but
-  it changes what an error message can honestly say — and a *difference between the two libraries* is
-  a real B-064 finding worth recording.
+- **The two libraries produce different wrong games from a non-English file — measured, B-115.**
+  `pgn-reader` drops tokens it cannot parse; `chessops` rewrites them into different legal moves. So a
+  German file yields `plyCount` 3 at import and a four-ply game on the board, and neither side
+  complains. Covered by ADR-0009's stated assumption that input is English SAN.
 - **`pgn-reader`'s visitor API is a streaming interface the AI has never compiled**, and it shifts
   across 0.x releases (B-063). Mitigated by making milestone 1 tiny.
 - **`shakmaty` is deliberately not a direct dependency.** The importer never builds a board, so it
