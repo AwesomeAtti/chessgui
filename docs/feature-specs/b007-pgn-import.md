@@ -1,7 +1,7 @@
 # Feature Spec: B-007 — PGN import
 
 - **Backlog ID:** B-007
-- **Status:** **milestones 1, 2 and 3 done** (sessions 5, 6 and 7); milestone 4 is next
+- **Status:** **all four milestones done** (sessions 5, 6, 7 and 8). The file dialog, drag-and-drop and the multi-file report landed at milestone 4; B-011 is what makes the library survive a restart.
 - **Owner:** Project owner
 - **Size tier:** **Large**, though smaller with each revision. One new Rust crate and the first IPC
   call carrying real data.
@@ -125,7 +125,15 @@ contain.
 - [ ] Bytes that are only PGN by extension do not crash the importer. They produce **one empty junk
       row**, because the library returns a game with default headers rather than refusing —
       accepted, visible, removable, and asserted by a fixture.
-- [ ] A Latin-1 file with accented names imports, since Latin-1 is what the PGN spec actually names.
+- [x] A Latin-1 file with accented names imports, since Latin-1 is what the PGN spec actually names.
+      **Closed at milestone 4, and it is the only ADR-0009 rule that could not be reached before**:
+      pasted text has already been decoded by the webview, so a declaration-free Latin-1 file can
+      only arrive as a file. `files.rs` asserts the fallback fires on `latin1-no-declaration.pgn`,
+      and the per-file report *says so* rather than swallowing it — a silent fallback is how a
+      mis-decoded name gets into a library and stays there.
+- [x] **A file that fails does not cost the files after it.** Added at milestone 4, because the
+      criterion above it — corrected at milestone 2 to "a file is the unit of failure" — turns out
+      to have a second half nobody had written down. Asserted in `files.rs`.
 - [x] Re-importing the same text twice produces duplicate rows. **Expected**, and worth a test so
       nobody later "fixes" it into a silent merge.
 - [x] `npm run check:i18n` passes: no error text in components, no English from Rust.
@@ -146,8 +154,14 @@ contain.
 - **`shakmaty` is deliberately not a direct dependency.** The importer never builds a board, so it
   is not needed; `pgn-reader` carries it transitively. It returns, with its `variant` feature, when
   the position index (B-018/B-042) arrives.
-- **Performance unmeasured** (B-033): a 3,000-game paste crosses IPC as one string. Measure, then
-  decide; do not pre-optimise.
+- ~~**Performance unmeasured** (B-033)~~ **— measured at milestone 4, and the risk was in the wrong
+  half.** Through the real `Importer`, at the shipped `opt-level = "s"`, on two vCPUs: **3,000 games
+  is ~95 ms end to end** (40 ms decode+parse, 23 ms serialise, 32 ms `JSON.parse`) and **10,000 games
+  is ~340 ms**. Parsing is not the cost; **moving the result is**, and the payload is 1.5× the source
+  file because ADR-0005 puts the verbatim PGN in every row — which the library table never reads.
+  That is B-011's to fix, not this feature's. Two consequences: **B-067 progress streaming is not
+  justified** (a bar that appears for 95 ms is worse than none), and there was no measured reason to
+  import files one at a time.
 - **Diagnostic quality is now a feature, not a nicety** — see the error shape above.
 - **Player identity without a database.** `Game.white` needs a `PlayerId`; stable IDs are B-011's.
   MVP assigns per-session sequential IDs and derives `normalisedName`. Merging is B-022.
@@ -251,9 +265,44 @@ after a clean import.
 export. **Timing 3,000 games is still unmeasured** — the owner's paste was a month of chess.com
 games, not a decade — so B-033 has no number yet.
 
-**Milestone 4 — file import.**
-The file dialog behind `src/shell/`, reading bytes rather than a string, plus the encoding path. A
-plain error list, handed to B-097 for the polished version.
+**Milestone 4 — file import. DONE (session 8).**
+Delivered: `src-tauri/src/files.rs` (IO, but no Tauri, so it is compiled and tested rather than
+handed over on trust); the `import_pgn_files` command; `src/shell/files.ts` (native picker and the
+window drag-drop subscription) and `src/shell/opener.ts` (B-117); the dialog's second tab; and the
+per-file report. `src-tauri/capabilities/` exists from this milestone.
+
+**The finding, and it invalidated a shape rather than a fact.** Everything downstream of milestone 3
+was built on *at most one failure per import* — true, and true of **one input**. Several files are
+several inputs, so an operation can now report a failure followed by later successes: the "n games
+with holes" shape the standing constraint warns against, arriving legitimately because the holes fall
+*between* files rather than inside one. `ImportReport` grew a per-file dimension, and `failure` is
+deliberately left null for a multi-file report rather than synthesising a "first failure" — the
+synthesised version would have let every milestone-3 consumer keep compiling while quietly showing
+one problem and hiding the rest.
+
+**Two decisions from the owner, both taken against a surveyed default.**
+
+- **A drop opens the dialog on its Files tab, listing what was caught, and waits for Import.** The
+  survey found no product in this category stages files — Scid vs. PC multi-selects in the OS dialog
+  and goes. The staged list is here anyway because a *drag* is easy to make by accident where an OS
+  picker is not, and naming the files is the confirmation. The picker fills the same list so the two
+  paths cannot diverge. A drop on a game tab returns to the library first.
+- **One game imported offers to open it**, for drop and paste alike. Not a fourth exception to the
+  closing rule but an instance of it: *the strip always records; the dialog additionally stops you
+  when there is a decision*, and this is one. Noted for the record that **Lichess does the opposite**
+  and navigates straight to the game — it can afford to, because a single game is its only case.
+
+**Three things looking at the rendered output found that a green build could not.** Every number in
+the catalogue was interpolated bare, so a real byte offset rendered as `2180442` — i18next's `Intl`
+formatter had been available and unused since milestone 3, and `{{value, number}}` now routes every
+user-visible number through it. An unreadable file reported "0 games" beside "this file could not be
+opened", which reads as a measurement rather than a failure. And the failure lines under a file were
+flush with the file name, so they read as siblings of it.
+
+→ `npm run typecheck && npm test && npm run check:i18n && npm run build`, then
+`cargo test --manifest-path src-tauri/Cargo.toml`, then `npm run tauri dev`: drop a PGN file on the
+library, drop one on an open game tab, choose several from the picker including one that is missing,
+and paste a single game.
 
 ## Future enhancements
 

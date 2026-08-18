@@ -108,6 +108,35 @@ answering handover risk 2.
 3. **The only product that documents its failure surface puts it in the same window, under the
    input.** None of the four shows a modal "here is what happened".
 
+### File import: nobody stages, and that is worth knowing before you build a list
+
+> Added at B-007 milestone 4. The question was "does an import dialog let you review the files
+> before it acts", and the answer is no — which is the opposite of what the first mockup assumed.
+
+| Product | Choosing files | Staged before importing? |
+|---|---|---|
+| **Scid vs. PC** | Tools ▸ *Import PGN file*, **multi-select** — "several PGN files can be selected in this dialogue at once" | **No.** The OS dialog is the review step; feedback appears in a frame below |
+| **En Croissant** | *Add Database* ▸ "Click to select a PGN file" — **one file** | **No.** Straight to conversion, with a progress readout (games imported, games/sec) |
+| **Lichess** | `/paste`: a text box or a single file upload | **No.** It imports and navigates you to the game |
+| **ChessBase** | Drag-and-drop is widely described; **not confirmed in its own documentation**, so recorded as unverified rather than repeated | Unknown |
+
+**Three findings.**
+
+1. **No product in this category stages a file list.** The instinct to build one comes from photo
+   libraries — Lightroom's import grid exists to choose *which* of 400 card images to take — and a
+   PGN import has no equivalent question, because the user already picked the files by name.
+2. **Multi-select is the norm where it is documented, and one-at-a-time is not a safety measure**
+   — En Croissant's single file is about database size, not caution.
+3. **Where feedback goes is settled by the same rule as paste**: in the window, under the input,
+   never a modal announcing success.
+
+**What we did anyway, and why it is not a contradiction.** chessgui stages the list, on the owner's
+call, because **the drop path has no OS dialog in front of it.** A drag is a gesture that is easy to
+make by accident; a file picker is a deliberate act with its own confirm button. Naming what was
+caught *is* the confirmation, which is why there is no separate "import 3 files?" prompt in front of
+it — and the picker fills the same list so that the two entry points cannot behave differently. The
+survey's finding stands for products whose only entry point is a picker.
+
 ### The outcome is a separate decision from the entry point
 
 General UX guidance is to match intrusiveness to criticality: simple confirmations get the least
@@ -130,6 +159,9 @@ no Apple guidance is reflected above.
 - [Board window — ChessBase 18](https://help.chessbase.com/CBase/18/Eng/board_window.htm)
 - [Database window — ChessBase 18](https://help.chessbase.com/CBase/18/Eng/database_window.htm)
 - [Clip database — ChessBase 18](https://help.chessbase.com/CBase/18/Eng/clip_database.htm)
+- [Main menus — Scid vs. PC](https://scidvspc.sourceforge.net/doc/Menus.htm) (the multi-select note)
+- [Managing databases — En Croissant](https://encroissant.org/docs/guides/manage-repertoire)
+- [Import game — Lichess](https://lichess.org/paste)
 - [Automatically paste PGN and FEN — ChessBase](https://help.chessbase.com/cbase/17/eng/automatically_paste_pgn_and_fe.htm)
 - [Scid vs. PC — Main Menus](https://scidvspc.sourceforge.net/doc/Menus.htm)
 - [Scid vs. PC — the Import window](https://scidvspc.sourceforge.net/doc/Import.htm)
