@@ -1,7 +1,8 @@
 //! chessgui — Tauri shell.
 //!
-//! M1 is a skeleton: this process opens a window and serves the frontend. It owns no
-//! chess logic and no storage yet.
+//! M1 is a skeleton: this process opens a window and serves the frontend. B-007 milestone 2
+//! added the first real logic, in [`import`] — a pure module with no IO and no Tauri, which
+//! is what lets it be tested without a window.
 //!
 //! Two rules that hold from here on:
 //!
@@ -9,6 +10,8 @@
 //!    every user-facing word. See `AppError`.
 //! 2. **Everything the frontend calls goes through `src/shell/ipc.ts`** on the other side,
 //!    which is what keeps ADR-0001 reversible.
+
+pub mod import;
 
 use serde::Serialize;
 
