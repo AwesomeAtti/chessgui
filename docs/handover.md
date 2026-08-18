@@ -10,13 +10,18 @@ named `72b7d12` as the last commit and there were nine, not eight — `ddada37` 
 came afterwards, exactly the staleness the rule below exists to prevent, in the very session that
 wrote the rule.
 
-**Session 6's work is in the working tree and NOT committed at the time of writing**, because the AI
-cannot run git writes from its sandbox. **This line is stale the moment you commit — rewrite it from
-`git log`, which is the procedure below, not an intention.** Files touched: `src-tauri/src/import/`
-(five new), `src-tauri/tests/import_corpus.rs` (new), `src-tauri/src/lib.rs`, `src-tauri/Cargo.toml`,
-`src-tauri/Cargo.lock`, `fixtures/pgn/expected.json`, `fixtures/README.md`,
-`docs/adr/0009-strict-pgn-import.md`, `docs/feature-specs/b007-pgn-import.md`, `docs/backlog.md`,
-this file.
+**Session 6 is committed and pushed in five increments** — `28e5240` ADR-0009 addendum and spec
+correction · `91ff8ae` `unicode-normalization` and the MSRV fix · `5a04622` the import module and the
+corpus guard · `0771386` backlog and handover · **and a fifth carrying this paragraph.**
+`git log origin/main..HEAD` is empty and the tree is clean, read from `git log` after the push rather
+than predicted before it.
+
+**The fifth commit is the point.** Four consecutive handovers undercounted their own session because
+the header was written before the last push, and the only way to write it from `git log` is to amend
+it *after* — which costs one extra commit. **That is the price of the rule, and it is worth paying:**
+a header that costs a commit is honest, a header that costs nothing has been wrong four times running.
+The commit order was chosen so each one builds on its own: docs, then the manifest, then the module
+that needs it, then the record.
 
 **Written last, deliberately.** That is the rule this file keeps breaking, so here it is as a
 procedure rather than an intention: **write the header after the final push, from `git log`, not from
@@ -87,10 +92,12 @@ repository. Risk 5 is downgraded but not closed — see the risk register.
 
 ## Active work
 
-**Nothing is half-built. B-007 milestones 1 and 2 are done; milestone 3 is the next thing to start.**
+**Nothing is in progress and nothing is half-built. B-007 milestones 1 and 2 are done, committed and
+pushed; milestone 3 is the next thing to start.**
 
-The one piece of unfinished business is not code: **session 6's changes are uncommitted**, because the
-AI cannot write git state. Run the verification commands in "Next actions" first, then commit.
+Verified on the owner's machine at close: `cargo fmt --check`, `cargo clippy --all-targets -D warnings`,
+`cargo test` (34 Rust tests across four suites), `npm test` (32), `typecheck`, `check:i18n` — all green,
+including the first build of the Tauri crate together with the new module.
 
 ### Session 6: the import module, and the acceptance criterion it falsified
 
@@ -1055,22 +1062,12 @@ Session 1:
 
 ## Next actions
 
-**Nothing is blocked and nothing is half-built — but session 6 is uncommitted.** Do this first:
+**Nothing is blocked, nothing is half-built, and everything is committed and pushed.** Every gate CI
+applies is green on the owner's machine — `cargo fmt`, `cargo clippy --all-targets -D warnings`,
+`cargo test`, `npm test`, `typecheck`, `check:i18n`, and the hand-edited `Cargo.lock` survived
+`cargo test` unchanged. Nothing in this session had a visual acceptance criterion, because none of it
+touched UI.
 
-0. **Verify and commit session 6.** In a real terminal, from the repository root:
-   `cargo fmt --manifest-path src-tauri/Cargo.toml --check`,
-   `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`,
-   `cargo test --manifest-path src-tauri/Cargo.toml`, and `npm test && npm run typecheck &&
-   npm run check:i18n` for the untouched half.
-   **All three cargo commands passed in the AI's container** against a mirror crate holding the same
-   sources and the same pinned `pgn-reader 0.29.0` — what it could not build is the Tauri crate
-   itself, for want of system webview libraries, so the first run on your machine is the first time
-   the whole thing compiles together. **Check `git diff src-tauri/Cargo.lock`**: the lock was edited
-   by hand for `unicode-normalization`, and `cargo test` will correct it silently if the edit was off.
-   Suggested commit split, which keeps the policy change separate from the code that follows it, as
-   sessions 3 and 5 did: (1) ADR-0009 addendum + spec correction + `fixtures/README.md`; (2) the
-   import module + corpus test + `expected.json`; (3) `Cargo.toml`/`Cargo.lock`/`lib.rs`; (4) backlog
-   + handover.
 1. **B-007 milestone 3 — IPC and the paste path.** `import_pgn_text`; `ipc.ts` gains the call and the
    result types; a paste target; `LibraryView` reads imported games; `src/mock/games.ts` deleted;
    error codes get catalogue entries — **there are only three**, `unterminated_comment`,
