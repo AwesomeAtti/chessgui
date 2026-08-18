@@ -481,6 +481,22 @@ button {
   overflow-wrap: anywhere;
 }
 
+/*
+ * An external URL (B-117). A button, because an anchor would navigate the app window away
+ * from the app — so it has to be made to look like the link it behaves as, rather than
+ * inheriting button chrome.
+ */
+.info-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--selection-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 .info-player-name {
   font-weight: 600;
   min-width: 0;
@@ -607,6 +623,99 @@ button {
   justify-content: flex-end;
 }
 
+/* The source tabs — Paste and Files (milestone 4) -------------------------------- */
+
+/*
+ * Absent while there was one source, present now that there are two. Underline rather than a
+ * raised tab shape: this sits inside a dialog that already has a border, and a second frame
+ * inside the first reads as a window inside a window.
+ */
+.dialog-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: -2px;
+}
+
+.dialog-tabs button {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  padding: 5px 12px;
+}
+
+.dialog-tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--selection-strong);
+  font-weight: 600;
+}
+
+/* The Files tab ------------------------------------------------------------------ */
+
+/*
+ * Dashed, because it says "things can land here" in the one visual language every desktop
+ * user already reads. It is **not itself a drop target** — Tauri's drag-drop event is
+ * window-wide and cannot be scoped to an element — so this describes where a drop goes rather
+ * than catching one. The staged list below is where a drop actually shows up.
+ */
+.import-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px var(--gap);
+  border: 2px dashed var(--line);
+  border-radius: 6px;
+  background: var(--surface-sunken);
+}
+
+.import-drop-hint {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.import-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.import-file-list li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.import-file-list li:last-child {
+  border-bottom: none;
+}
+
+.import-file-remove {
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.import-file-remove:hover {
+  background: var(--surface-raised);
+  border-color: var(--line);
+}
+
 /* Import outcome — shown in the dialog's result step and in the library strip ---- */
 
 /*
@@ -652,6 +761,63 @@ button {
 
 .import-outcome-inline .import-stopped {
   color: var(--text-muted);
+}
+
+/*
+ * The per-file breakdown (milestone 4).
+ *
+ * Every file gets a row, including the ones that went perfectly — a list of only the failures
+ * makes "did it read the second file at all?" unanswerable. In the strip's inline layout the
+ * list is suppressed to its counts, because a strip is one line and the dialog is where the
+ * detail belongs; the summary sentence above it already carries the totals either way.
+ */
+.import-files {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.import-file {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+}
+
+.import-file-name {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.import-file-count {
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The detail lines under a file span both columns and sit under its name, indented — without
+ * the indent the bold "Game 1,034 — …" line reads as a sibling of the file name rather than as
+ * something belonging to it, which was visible the moment the list was rendered with a real
+ * mix of outcomes in it.
+ */
+.import-file .import-reason,
+.import-file .import-failure-game,
+.import-file .import-stopped,
+.import-file .import-note {
+  grid-column: 1 / -1;
+  padding-left: 12px;
+}
+
+.import-file .import-stopped,
+.import-file .import-note {
+  color: var(--text-muted);
+}
+
+.import-outcome-inline .import-files {
+  display: none;
 }
 
 .import-strip {

@@ -16,8 +16,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TabBar, type OpenTab } from "@/features/shell/TabBar";
-import { ImportDialog, type ImportStep } from "@/features/library/ImportDialog";
 import {
+  ImportDialog,
+  type ImportSource,
+  type ImportStep,
+} from "@/features/library/ImportDialog";
+import {
+  buildFileImportReport,
   buildImportReport,
   shouldCloseAfterImport,
   type ImportReport,
@@ -27,10 +32,12 @@ import { GameView } from "@/features/game/GameView";
 import type { Game, GameId } from "@/model/game";
 import {
   getAppInfo,
+  importPgnFiles,
   importPgnText,
   isShellAvailable,
   type AppInfo,
 } from "@/shell/ipc";
+import { choosePgnFiles, onPgnFileDrop } from "@/shell/files";
 import { isAccelPressed } from "@/shell/platform";
 
 interface OpenGame {
@@ -56,7 +63,10 @@ export default function App() {
 
   const [importOpen, setImportOpen] = useState(false);
   const [importStep, setImportStep] = useState<ImportStep>("input");
+  const [importSource, setImportSource] = useState<ImportSource>("paste");
   const [importText, setImportText] = useState("");
+  /** Absolute paths staged for import. Only their base names ever reach the screen. */
+  const [importPaths, setImportPaths] = useState<readonly string[]>([]);
   const [importBusy, setImportBusy] = useState(false);
   /**
    * The last import's outcome. **Deliberately not owned by the dialog**, which is the whole of
@@ -92,8 +102,100 @@ export default function App() {
 
   const openImport = useCallback((prefill?: string) => {
     if (prefill !== undefined) setImportText(prefill);
+    setImportSource("paste");
     setImportStep("input");
     setImportOpen(true);
+  }, []);
+
+  /**
+   * Files were dropped on the window.
+   *
+   * **Always returns to the library first, then confirms.** Dropping on a game tab and having
+   * games appear in a list you cannot see is the version that feels like nothing happened, and
+   * the switch also makes the dialog's file list legible as "these are about to join *this*
+   * table". The dialog is the confirmation — it names what we caught before acting on it —
+   * which is why there is no separate prompt in front of it.
+   */
+  const dropFiles = useCallback((paths: readonly string[]) => {
+    setActiveGameId(null);
+    setImportPaths(paths);
+    setImportSource("files");
+    setImportStep("input");
+    setImportOpen(true);
+  }, []);
+
+  useEffect(() => onPgnFileDrop(dropFiles), [dropFiles]);
+
+  /**
+   * Pasting anywhere opens the Add games dialog with the pasted text in it.
+   *
+   * **Lives here rather than in `LibraryView`, which is where it started.** Mounted in that
+   * view it only existed while the library was on screen, so a paste on a game tab did
+   * nothing — not a decision anybody made, just a consequence of where the effect was
+   * declared, and found by the owner testing the build. A drop and a paste mean the same
+   * thing, so they behave the same way: return to the library, then confirm in the dialog.
+   *
+   * **We do not check whether the text looks like PGN, and that is deliberate.** Sniffing it
+   * would be us deciding what a valid game looks like, which is precisely the validation
+   * ADR-0009 declines — `pgn-reader` is the only thing entitled to that opinion. Text that is
+   * not PGN produces one empty junk row, visibly and removably.
+   *
+   * A `paste` listener rather than reading the clipboard on a keypress: the gesture carries
+   * its own data, so this needs no clipboard permission and no platform branch.
+   */
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target !== null && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      // With the dialog already open, the dialog is the place to paste — its own textarea
+      // handles it, and hijacking the gesture would discard whatever is staged there.
+      if (importOpen) return;
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      if (text.trim() === "") return;
+      event.preventDefault();
+      setActiveGameId(null);
+      openImport(text);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [importOpen, openImport]);
+
+  const chooseFiles = useCallback(async () => {
+    const chosen = await choosePgnFiles();
+    // Appended rather than replaced, so a second trip to the picker adds to the list instead
+    // of quietly discarding what was there. Cancelling returns nothing and changes nothing.
+    if (chosen.length > 0) setImportPaths((current) => [...current, ...chosen]);
+  }, []);
+
+  /**
+   * Apply a finished import.
+   *
+   * Shared by both sources on purpose: the difference between a paste and a batch of files is
+   * entirely in how the report was built, and everything after that — the strip, the closing
+   * rule, appending the rows — must not be able to diverge.
+   */
+  const applyImport = useCallback((report: ImportReport, imported: readonly Game[]) => {
+    // **The strip always gets the outcome**, whichever way the dialog goes. That is what makes
+    // dismissing the dialog safe, and it is the difference between this and the version that
+    // was reported as losing the status.
+    setImportReport(report);
+
+    if (shouldCloseAfterImport(report)) {
+      setImportOpen(false);
+      // Clearing the inputs is part of closing: reopening on last week's paste, or on a file
+      // list that has already been imported, is how games get imported twice by accident, and
+      // duplicate rows are expected but not free.
+      setImportText("");
+      setImportPaths([]);
+    } else {
+      // Something to read or act on, so the dialog holds — on its result step, not on a box
+      // still full of the text that just failed.
+      setImportStep("result");
+    }
+    // Appended rather than replaced: ids come from one long-lived importer in the backend, so
+    // two imports are two batches of the same library. Duplicate rows are expected and visible
+    // (ADR-0008 rule 6 was deleted); de-duplicating is B-022.
+    setGames((current) => [...current, ...imported]);
   }, []);
 
   const runImport = useCallback(async () => {
@@ -101,6 +203,23 @@ export default function App() {
     // The previous outcome goes as soon as a new import starts: a strip describing the last
     // run while this one is in flight is worse than no strip.
     setImportReport(null);
+
+    if (importSource === "files") {
+      const result = await importPgnFiles(importPaths);
+      setImportBusy(false);
+      if (!result.ok) {
+        console.error("[import] ipc failed", result.error);
+        return;
+      }
+      applyImport(
+        buildFileImportReport(result.value),
+        result.value.flatMap((file) =>
+          file.outcome.kind === "imported" ? file.outcome.summary.games : [],
+        ),
+      );
+      return;
+    }
+
     const result = await importPgnText(importText);
     setImportBusy(false);
     if (!result.ok) {
@@ -109,28 +228,8 @@ export default function App() {
       console.error("[import] ipc failed", result.error);
       return;
     }
-
-    const report = buildImportReport(result.value);
-    // **The strip always gets the outcome**, whichever way the dialog goes. That is what makes
-    // dismissing the dialog safe, and it is the difference between this and the version that
-    // was reported as losing the status.
-    setImportReport(report);
-
-    if (shouldCloseAfterImport(report)) {
-      setImportOpen(false);
-      // Clearing the box is part of closing: reopening it on last week's paste is how a game
-      // gets imported twice by accident, and duplicate rows are expected but not free.
-      setImportText("");
-    } else {
-      // Something to read or act on, so the dialog holds — on its result step, not on a box
-      // still full of the text that just failed.
-      setImportStep("result");
-    }
-    // Appended rather than replaced: ids come from one long-lived importer in the backend, so
-    // two pastes are two batches of the same library. Duplicate rows are expected and visible
-    // (ADR-0008 rule 6 was deleted); de-duplicating is B-022.
-    setGames((current) => [...current, ...result.value.games]);
-  }, [importText]);
+    applyImport(buildImportReport(result.value), result.value.games);
+  }, [applyImport, importPaths, importSource, importText]);
 
   const setPly = useCallback((gameId: GameId, ply: number) => {
     setOpenGames((current) =>
@@ -211,11 +310,32 @@ export default function App() {
       <ImportDialog
         open={importOpen}
         step={importStep}
+        source={importSource}
+        onSourceChange={setImportSource}
         text={importText}
         onTextChange={setImportText}
+        paths={importPaths}
+        onChooseFiles={() => void chooseFiles()}
+        onRemovePath={(index) =>
+          setImportPaths((current) => current.filter((_, at) => at !== index))
+        }
         report={importReport}
         busy={importBusy}
         onImport={() => void runImport()}
+        // Offered only when exactly one game arrived and nothing else needs saying. The strip
+        // deliberately does *not* carry this: it records, and opening a game is an action.
+        onOpenGame={
+          importReport?.singleGameId == null
+            ? null
+            : () => {
+                const id = importReport.singleGameId;
+                if (id === null) return;
+                openGame(id);
+                setImportOpen(false);
+                setImportText("");
+                setImportPaths([]);
+              }
+        }
         onBack={() => setImportStep("input")}
         onClose={() => setImportOpen(false)}
       />

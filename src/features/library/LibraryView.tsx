@@ -123,28 +123,13 @@ export function LibraryView({
     return () => window.removeEventListener("keydown", onKey);
   }, [filtered, selectedId, onSelect, onOpen]);
 
-  // Pasting anywhere in the library opens the Add games dialog with the pasted text in it.
-  //
-  // **We do not check whether it looks like PGN, and that is deliberate.** Sniffing the text
-  // would be us deciding what a valid game looks like, which is precisely the validation
-  // ADR-0009 declines — `pgn-reader` is the only thing entitled to that opinion. In this view
-  // there is nothing else a paste could mean, so anything non-empty opens the dialog and the
-  // parser answers. Text that is not PGN produces one empty junk row, visibly and removably.
-  //
-  // A `paste` listener rather than reading the clipboard on a keypress: the gesture carries
-  // its own data, so this needs no clipboard permission and no platform branch.
-  useEffect(() => {
-    const onPaste = (event: ClipboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target !== null && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
-      const text = event.clipboardData?.getData("text/plain") ?? "";
-      if (text.trim() === "") return;
-      event.preventDefault();
-      onAddGames(text);
-    };
-    window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [onAddGames]);
+  // **The paste listener used to live here and now lives in `App.tsx`** (session 8, found by
+  // the owner testing the build). Mounted in this view it existed only while the library was
+  // on screen, so pasting on a game tab silently did nothing — not a decision anybody made,
+  // just a consequence of where the effect was declared. A dropped file already switched to
+  // the library and opened the dialog; a paste now does the same, because the two gestures
+  // mean the same thing and differing on which tab you happen to be looking at is not a
+  // distinction a user can learn.
 
   useEffect(() => {
     activeRow.current?.scrollIntoView({ block: "nearest" });

@@ -21,6 +21,8 @@ import { useTranslation } from "react-i18next";
 import { formatPgnDate } from "@/i18n/format";
 import { GameResult, type Game } from "@/model/game";
 
+import { openExternal } from "@/shell/opener";
+
 import { allTags, moveCount, parseTimeControl, presentTag } from "./infoFields";
 
 function resultKey(result: Game["result"]) {
@@ -43,6 +45,36 @@ function Row({ label, value }: { label: string; value: string | null }) {
     <div className="info-row">
       <span className="info-key">{label}</span>
       <span className="info-value">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * A row whose value is an external URL (B-117).
+ *
+ * **A `<button>`, not an `<a href>`**, and that is the whole point of the item: in a Tauri
+ * webview an anchor navigates the *app window* away from the app, with no back button to
+ * return with. `target="_blank"` does not fix it — that is the version that looks like it
+ * works. The click goes through `src/shell/opener.ts`, which hands the URL to the OS and
+ * refuses anything that is not `http:`/`https:`, because this string came out of a PGN tag
+ * written by whoever produced the file.
+ *
+ * The URL is still shown in full rather than behind a label. It remains selectable and
+ * copyable, which is what it was before this became clickable, and a truncated URL you cannot
+ * read is not an improvement on a long one you can.
+ */
+function LinkRow({ label, value }: { label: string; value: string | null }) {
+  if (value === null) return null;
+  return (
+    <div className="info-row">
+      <span className="info-key">{label}</span>
+      <button
+        type="button"
+        className="info-value info-link"
+        onClick={() => void openExternal(value)}
+      >
+        {value}
+      </button>
     </div>
   );
 }
@@ -114,15 +146,15 @@ export function GameInfo({ game }: { game: Game }) {
           <h3>{t("info.opening")}</h3>
           <Row label={t("info.eco")} value={presentTag(game.eco)} />
           {/*
-            The URL is text, not a link, and not a name.
+            The URL opens externally, and is still not a name.
             **Not a name** because decoding the slug ships visibly wrong text — B-105, where
             `Kings-Indian-Attack` loses its apostrophe and the colon in a real opening name has
             no slug representation at all. A name comes from an ECO table or not at all.
-            **Not a link** because opening one from a Tauri webview needs the opener plugin
-            behind `src/shell/` (ADR-0001, B-069); a bare anchor would navigate the app window
-            away from the app, which is a worse failure than plain text. That is B-117.
+            **Now opens rather than sitting as text**: B-117 landed alongside milestone 4,
+            because both needed the same capabilities file. See `LinkRow` for why it is a
+            button.
           */}
-          <Row label={t("info.openingUrl")} value={presentTag(game.ecoUrl)} />
+          <LinkRow label={t("info.openingUrl")} value={presentTag(game.ecoUrl)} />
         </section>
       )}
 

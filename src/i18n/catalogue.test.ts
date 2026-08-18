@@ -19,7 +19,10 @@
 import i18next from "i18next";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { IMPORT_REASON_KEYS } from "@/features/library/importReport";
+import {
+  FILE_REASON_KEYS,
+  IMPORT_REASON_KEYS,
+} from "@/features/library/importReport";
 import { en } from "./locales/en";
 
 const t = i18next.t.bind(i18next);
@@ -69,6 +72,59 @@ describe("the import catalogue", () => {
     for (const key of Object.values(IMPORT_REASON_KEYS)) resolved(key, t(key));
   });
 
+  it("resolves every reason a file can fail to open", () => {
+    for (const key of Object.values(FILE_REASON_KEYS)) resolved(key, t(key));
+  });
+
+  it("resolves both plural forms of the counts a file summary interpolates", () => {
+    expect(resolved("import.count.games", t("import.count.games", { count: 1 }))).toBe("1 game");
+    expect(resolved("import.count.games", t("import.count.games", { count: 9 }))).toBe("9 games");
+    // Grouped through Intl, which is the whole reason these are `{{count, number}}`.
+    expect(t("import.count.games", { count: 1206 })).toBe("1,206 games");
+    expect(resolved("import.count.files", t("import.count.files", { count: 1 }))).toBe("1 file");
+    expect(resolved("import.count.files", t("import.count.files", { count: 3 }))).toBe("3 files");
+  });
+
+  it("builds the multi-file summaries out of already-pluralised counts", () => {
+    // The two-numbers-in-one-sentence case. If either count arrives unresolved this renders a
+    // raw key or a stray `{{`, which `resolved` catches — the same door the milestone-3 plural
+    // bug came through.
+    const games = t("import.count.games", { count: 1206 });
+    const files = t("import.count.files", { count: 3 });
+    const failed = t("import.count.files", { count: 1 });
+
+    expect(resolved("import.summary.okFiles", t("import.summary.okFiles", { games, files }))).toBe(
+      "1,206 games imported from 3 files.",
+    );
+    expect(
+      resolved(
+        "import.summary.stoppedFiles",
+        t("import.summary.stoppedFiles", { games, files, failed }),
+      ),
+    ).toContain("1 file did not finish");
+    expect(
+      resolved("import.summary.noneFiles", t("import.summary.noneFiles", { files })),
+    ).toContain("3 files");
+  });
+
+  it("resolves the Files tab's own furniture", () => {
+    resolved("import.tabs.paste", t("import.tabs.paste"));
+    resolved("import.tabs.files", t("import.tabs.files"));
+    resolved("import.files.label", t("import.files.label"));
+    resolved("import.files.choose", t("import.files.choose"));
+    resolved("import.files.dropHint", t("import.files.dropHint"));
+    resolved("import.files.remove", t("import.files.remove"));
+    resolved("import.files.unnamed", t("import.files.unnamed"));
+    resolved("import.files.latin1", t("import.files.latin1"));
+    resolved("import.openGame", t("import.openGame"));
+    expect(resolved("import.files.confirm", t("import.files.confirm", { count: 1 }))).toBe(
+      "Import 1 file",
+    );
+    expect(resolved("import.files.confirm", t("import.files.confirm", { count: 4 }))).toBe(
+      "Import 4 files",
+    );
+  });
+
   it("fills in the failing game's identity", () => {
     const named = resolved(
       "import.failedGameNamed",
@@ -87,7 +143,7 @@ describe("the import catalogue", () => {
   it("fills in the byte offset, which is the only thing that locates the problem", () => {
     expect(
       resolved("import.stoppedAt", t("import.stoppedAt", { offset: 1204 })),
-    ).toContain("1204");
+    ).toContain("1,204");
   });
 
   it("resolves the dialog's own furniture", () => {
