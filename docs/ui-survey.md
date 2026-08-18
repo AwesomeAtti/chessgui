@@ -85,10 +85,56 @@ answering handover risk 2.
    structural fork, it is what ChessBase and Scid answer differently, and it is much harder to
    change later than pane proportions.
 
+## Import: where paste lives, and where a failure goes
+
+> Added at B-007 milestone 3, for the same reason as the rest of this file — the question was
+> "where does a paste target live", and the honest answer was that nobody here had checked.
+
+| Product | Where paste lives | Where a failure goes |
+|---|---|---|
+| **Scid vs. PC** | Tools ▸ *Import PGN text*, its own window. Separately Edit ▸ *Paste PGN* (clipboard, one game, no dialog) and Tools ▸ *Import PGN file* | **A second frame in the same window, below the text**: "the lower frame provides feedback of any errors or warnings" |
+| **ChessBase 18** | **Nowhere — there is no paste target at all.** It watches the clipboard and opens a board window when it sees a game; a FEN opens the position dialog | Not documented. The *clip database* is a staging area for **selecting** games, not for reviewing an import |
+| **Lichess** | A dedicated page, `/paste`: text box plus file upload, one game at a time | A message on the same page |
+| **En Croissant** | *Add Database* dialog from the Databases page, with **Local / Web / Accounts tabs** — file-oriented, no paste box | Not documented |
+
+**Three findings, and the first two would have been guessed wrong.**
+
+1. **Two of the four have no paste box.** The instinct that "an import feature needs somewhere to
+   paste" is not what the category converged on: ChessBase watches the clipboard, En Croissant is
+   entirely file-and-account oriented. A paste target is a convenience, not the front door.
+2. **The newest product organises import by *source*, as tabs** — which is the shape this project's
+   own roadmap already needs (milestone 4 file, B-012 chess.com, B-013 lichess). That is what
+   decided the "Add games" dialog over an import tab or an in-place strip.
+3. **The only product that documents its failure surface puts it in the same window, under the
+   input.** None of the four shows a modal "here is what happened".
+
+### The outcome is a separate decision from the entry point
+
+General UX guidance is to match intrusiveness to criticality: simple confirmations get the least
+disruptive surface, results needing action get more, dialogs are reserved for the most critical.
+**A two-step modal ending in a result screen is the convention of installers and setup wizards** —
+one-off linear flows — and importing games into a library is a repeated action.
+
+So the shipped answer is asymmetric on purpose: **every import leaves a record in a strip above the
+table, and only an import with something to act on holds the dialog open first.** Stated as a rule
+so it does not read as inconsistency: *the strip always records; the dialog additionally stops you
+when there is a decision.*
+
+**One caveat recorded rather than buried:** the chess-category evidence here is four products and
+their own documentation, not usability data. Better than taste, weaker than a study. Apple's HIG page
+on modality could not be read at all — JavaScript-rendered, the fetch returned only the header — so
+no Apple guidance is reflected above.
+
 ## Sources
 
 - [Board window — ChessBase 18](https://help.chessbase.com/CBase/18/Eng/board_window.htm)
 - [Database window — ChessBase 18](https://help.chessbase.com/CBase/18/Eng/database_window.htm)
+- [Clip database — ChessBase 18](https://help.chessbase.com/CBase/18/Eng/clip_database.htm)
+- [Automatically paste PGN and FEN — ChessBase](https://help.chessbase.com/cbase/17/eng/automatically_paste_pgn_and_fe.htm)
+- [Scid vs. PC — Main Menus](https://scidvspc.sourceforge.net/doc/Menus.htm)
+- [Scid vs. PC — the Import window](https://scidvspc.sourceforge.net/doc/Import.htm)
+- [En Croissant — Games and databases](https://franciscobsalgueiro-en-croissant.mintlify.app/features/games-and-databases)
+- [Sheets vs. dialogs vs. snackbars: what to use when — LogRocket](https://blog.logrocket.com/ux-design/sheets-dialogs-snackbars/)
 - [ChessBase 18 — Standard Layout or Custom Layout](https://en.chessbase.com/post/chessbase-18-beginner-s-tips-part-10-standard-layout-or-custom-layout)
 - [Scid vs. PC — README](https://scidvspc.sourceforge.net/README.html)
 - [Scid vs. PC — Sorting the Game List](https://scidvspc.sourceforge.net/doc/GameList.htm)

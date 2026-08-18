@@ -1,7 +1,7 @@
 # Feature Spec: B-007 — PGN import
 
 - **Backlog ID:** B-007
-- **Status:** **milestones 1 and 2 done** (sessions 5 and 6); milestone 3 is next
+- **Status:** **milestones 1, 2 and 3 done** (sessions 5, 6 and 7); milestone 4 is next
 - **Owner:** Project owner
 - **Size tier:** **Large**, though smaller with each revision. One new Rust crate and the first IPC
   call carrying real data.
@@ -126,10 +126,10 @@ contain.
       row**, because the library returns a game with default headers rather than refusing —
       accepted, visible, removable, and asserted by a fixture.
 - [ ] A Latin-1 file with accented names imports, since Latin-1 is what the PGN spec actually names.
-- [ ] Re-importing the same text twice produces duplicate rows. **Expected**, and worth a test so
+- [x] Re-importing the same text twice produces duplicate rows. **Expected**, and worth a test so
       nobody later "fixes" it into a silent merge.
-- [ ] `npm run check:i18n` passes: no error text in components, no English from Rust.
-- [ ] `src/mock/games.ts` is deleted.
+- [x] `npm run check:i18n` passes: no error text in components, no English from Rust.
+- [x] `src/mock/games.ts` is deleted.
 
 ## Risks & dependencies
 
@@ -218,12 +218,38 @@ reading it would have shown**, which is the same shape as the other seven on thi
 
 → `cargo test --manifest-path src-tauri/Cargo.toml`
 
-**Milestone 3 — IPC and the paste path.**
-`import_pgn_text`; `ipc.ts` gains the call and the result types; a paste target; `LibraryView` reads
-imported games; `src/mock/games.ts` deleted; error codes get catalogue entries.
+**Milestone 3 — IPC and the paste path. DONE (session 7), and owner-verified in the running app.**
+Delivered: `import_pgn_text` with one long-lived `Importer` in Tauri state; `ipc.ts` gains the call
+and the result types; the **Add games dialog**; `ImportStrip`; `ImportOutcome`; `importReport.ts`
+(pure, tested); `src/mock/games.ts` deleted; catalogue entries for the three error codes.
+
+**The UI was mocked and approved before it was coded**, per AGENTS.md, and the survey behind it is in
+`docs/ui-survey.md` — including the two findings that would have been guessed wrong (two of the four
+surveyed products have no paste box at all, and the newest organises import by *source* as tabs).
+
+**Decisions taken from the mockups:**
+
+- **The dialog is the home for every import source.** Milestone 4, B-012 and B-013 become tabs here
+  rather than new screens. The tab strip is absent while there is one source — a strip of one is
+  furniture, and greyed-out tabs advertise features that do not exist.
+- **Paste anywhere in the library opens the dialog, prefilled.** The pasted text is **not** sniffed
+  for PGN-ness: deciding what a valid game looks like is the validation ADR-0009 declines, and
+  `pgn-reader` is the only thing entitled to that opinion.
+- **The outcome lives in a strip above the table for every import; the dialog additionally holds on
+  a result step when there is something to act on.** Owner-reported twice on the way there: staying
+  open on success was awkward, and closing outright lost the record. The rule that resolves both is
+  *the strip always records; the dialog stops you only when there is a decision.*
+- **Drag-and-drop deferred to milestone 4**, because reading a dropped file is Tauri's file-drop
+  event — a platform surface (B-069), which is why file import has its own milestone.
+
+**Two findings from the owner running it, both fixed in the same session:** the info panel formatted
+real chess.com data poorly — five separate causes, only one of them styling, written up under B-105
+and rebuilt as curated groups over a full-tag disclosure — and the dialog's first version stayed open
+after a clean import.
+
 → `npm run typecheck && npm test && npm run check:i18n`, then `npm run tauri dev` and paste a real
-export. **First point at which a human must look**, and the first honest measurement of how long
-3,000 games takes.
+export. **Timing 3,000 games is still unmeasured** — the owner's paste was a month of chess.com
+games, not a decade — so B-033 has no number yet.
 
 **Milestone 4 — file import.**
 The file dialog behind `src/shell/`, reading bytes rather than a string, plus the encoding path. A
