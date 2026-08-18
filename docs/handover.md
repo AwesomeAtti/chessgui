@@ -3,35 +3,33 @@
 > The current state of the project. Update at the end of every session so the next session
 > (human or AI) can resume with zero chat history.
 
-**Last updated:** 2026-08-18 · **Updated by:** AI (Stage 3 / session 6) · **Kit version:** 0.2.0
+**Last updated:** 2026-08-18 · **Updated by:** AI (Stage 3 / session 7) · **Kit version:** 0.2.0
 
 **Head at session start:** `ddada37`, clean, level with `origin/main`. Note that session 5's header
 named `72b7d12` as the last commit and there were nine, not eight — `ddada37` ("Close session 5")
 came afterwards, exactly the staleness the rule below exists to prevent, in the very session that
 wrote the rule.
 
-**Session 6 is committed and pushed in five increments** — `28e5240` ADR-0009 addendum and spec
-correction · `91ff8ae` `unicode-normalization` and the MSRV fix · `5a04622` the import module and the
-corpus guard · `0771386` backlog and handover · **and a fifth carrying this paragraph.**
-`git log origin/main..HEAD` is empty and the tree is clean, read from `git log` after the push rather
-than predicted before it.
+**Head at session start:** `68bf46e`, clean, level with `origin/main`. Session 6 landed in five
+increments — `28e5240` · `91ff8ae` · `5a04622` · `0771386` · `68bf46e`.
 
-**The fifth commit is the point.** Four consecutive handovers undercounted their own session because
-the header was written before the last push, and the only way to write it from `git log` is to amend
-it *after* — which costs one extra commit. **That is the price of the rule, and it is worth paying:**
-a header that costs a commit is honest, a header that costs nothing has been wrong four times running.
-The commit order was chosen so each one builds on its own: docs, then the manifest, then the module
-that needs it, then the record.
+**Session 7's work is in the working tree and NOT committed at the time of writing**, because the AI
+cannot run git writes. **Rewrite this paragraph from `git log` after pushing** — that is the procedure
+below, and session 6 proved it costs one extra commit and is worth it. Files touched:
+`src-tauri/src/lib.rs`; `src/App.tsx`; `src/shell/ipc.ts`; `src/features/library/` (`ImportDialog`,
+`ImportOutcome`, `ImportStrip`, `importReport` + test, `LibraryView`); `src/features/game/`
+(`GameInfo`, `infoFields` + test); `src/i18n/locales/en.ts`; `src/i18n/catalogue.test.ts`;
+`src/styles.css`; `src/mock/games.ts` **deleted**; `docs/ui-survey.md`;
+`docs/feature-specs/b007-pgn-import.md`; `docs/backlog.md`; this file.
 
 **Written last, deliberately.** That is the rule this file keeps breaking, so here it is as a
 procedure rather than an intention: **write the header after the final push, from `git log`, not from
 memory.**
 
-**State in one line:** M1 closed and owner-verified; the project has a test harness, an 18-fixture PGN
-corpus, a settled import policy in **ADR-0009 — the libraries validate, we add nothing** — and now a
-working importer: **B-007 milestones 1 and 2 are done and the corpus is a guard rather than a
-record**. Next is milestone 3, IPC and the paste path, which is the first point at which a human must
-look.
+**State in one line:** **the app imports real games and shows them.** B-007 milestones 1–3 are done
+and owner-verified in the running app; a chess.com export pastes in, the games appear in the library,
+open, and play through. Next is milestone 4, file import — after which B-011 gives the library
+somewhere to live across restarts.
 
 **One standing constraint changed, and it changes how to plan every future session.** Previous
 handovers said the AI environment has no Rust toolchain, so "every session from here produces Rust
@@ -40,6 +38,18 @@ crates.io access, and milestone 2's Rust was written, compiled, tested, fmt-chec
 before it was handed over. What it still cannot do is build the *Tauri* crate (no system webview
 libraries) or install an old toolchain (`static.rust-lang.org` is blocked while crates.io is not), so
 the app itself and anything needing a window remain yours. See the notes at the end.
+
+**Session 7 in a paragraph.** Milestone 3, and the first session whose output the owner *used* rather
+than read. The paste path, the Add games dialog and the import report went in; the mock-before-code
+rule was followed and earned its keep twice. Running it produced four findings, two of them real: the
+dialog stayed open after a clean import (awkward), and the info panel formatted a real chess.com game
+badly — five separate causes, only one of them styling. Fixing the first the obvious way then lost the
+record entirely, which produced the session's actual design question and the rule that settles it:
+**the strip always records what happened; the dialog additionally stops you only when there is a
+decision.** A survey of how four products handle paste and failure is now in `docs/ui-survey.md`, and
+two of its findings would have been guessed wrong. One bug was caught before it was coded, in a
+mockup: the opening-name-from-slug trap (B-105), committed by the same AI that had recorded the
+warning, two paragraphs above the warning.
 
 **Session 6 in a paragraph.** A state review recommended B-007 milestone 2 and the owner approved it,
 choosing "measure first, then implement" for the one question the spec left open. The measurement ran
@@ -92,12 +102,67 @@ repository. Risk 5 is downgraded but not closed — see the risk register.
 
 ## Active work
 
-**Nothing is in progress and nothing is half-built. B-007 milestones 1 and 2 are done, committed and
-pushed; milestone 3 is the next thing to start.**
+**Nothing is in progress and nothing is half-built. B-007 milestones 1–3 are done; milestone 4 is the
+next thing to start.** Session 7 is uncommitted — run the checks in "Next actions" and commit.
 
-Verified on the owner's machine at close: `cargo fmt --check`, `cargo clippy --all-targets -D warnings`,
-`cargo test` (34 Rust tests across four suites), `npm test` (32), `typecheck`, `check:i18n` — all green,
-including the first build of the Tauri crate together with the new module.
+Verified: `npm run typecheck`, `npm test` (71), `npm run check:i18n`, `vite build` in the AI's
+container, and **the owner ran the app and used the feature**, which is the verification that matters
+for anything with a visual acceptance criterion.
+
+### Session 7: the paste path, and what using it found
+
+**B-007 milestone 3 is done.** `import_pgn_text` with one long-lived `Importer` in Tauri state, the
+Add games dialog, the import report, and `src/mock/games.ts` deleted — the library now holds real
+games. Pure logic sits in `importReport.ts` and `infoFields.ts` so it can be tested without a DOM;
+the components are thin.
+
+**The mock-before-code rule earned its keep twice, in different ways.**
+
+*First, by finding what the category actually does.* Two of the four products surveyed have **no paste
+box at all** — ChessBase watches the clipboard and opens a window, En Croissant is file-and-account
+only — and the newest organises import **by source, as tabs**, which is exactly the shape milestone 4,
+B-012 and B-013 need. That decided the dialog over the two alternatives. The write-up is in
+`docs/ui-survey.md`, including the caveat that four products and their own documentation is better
+than taste and weaker than a study.
+
+*Second, by catching a bug in a drawing rather than in code.* The info-panel mockup rendered an
+opening name by prettifying the `ECOUrl` slug — the exact trap recorded as B-105 — **two paragraphs
+above its own warning against doing that.** Nothing was built from it. B-105 raised P3 → P2: a trap
+that catches the person who recorded it will certainly catch a future contributor, and the fix is to
+make the right thing available rather than to keep warning about the wrong one.
+
+**Three findings from the owner running it.**
+
+1. **The dialog stayed open after a clean import.** Fixed, and then the fix was wrong in the other
+   direction: closing it outright meant the outcome was gone. **The rule that settles both is worth
+   carrying: the strip above the table always records what happened, and the dialog additionally
+   stops you only when there is something to act on.** That asymmetry is intrusiveness matched to
+   criticality, not inconsistency — a clean import asks nothing of you, a failure asks you to find
+   game 13 and fix it. `ImportOutcome` is rendered by both surfaces so the wording cannot drift.
+2. **The info panel formatted a real chess.com game poorly**, and only one of the five causes was
+   styling: the label column was sized by the longest key in the *file* (`CurrentPosition`, 42
+   characters) inside a 320px panel; result, both ratings, time control and termination were not
+   promoted at all; a FEN and two 43-character URLs wrapped into blocks; six date/time tags said
+   nearly the same thing; and `Round "-"` printed literally. Rebuilt as curated groups over a
+   disclosure holding **every** tag. The curation rules are all **spec knowledge, not chess.com
+   knowledge** — `-` and `?` are the PGN specification's placeholders — which is what keeps a Scid
+   export or a hand-typed game rendering through the same code.
+3. **Multi-game paste works and games open** — reported plainly, and worth recording as the first
+   end-to-end confirmation that the pipeline is real.
+
+**Two deliberate omissions, both platform-surface calls rather than laziness.** Drag-and-drop waits
+for milestone 4, because a dropped file is Tauri's file-drop event (B-069) — the same reason file
+import has its own milestone. And external links are shown as **text**: in a Tauri webview a bare
+anchor navigates the app window away from the app, so it needs the opener plugin behind `src/shell/`
+per ADR-0001. That is **B-117**, and its backlog note says plainly not to "just add target=_blank".
+
+**A judgement worth flagging for disagreement:** the info panel shows a move count derived from the
+ply count, which is a count of *tokens*. It can disagree with the move list beside it — 9 against a
+board that stops at 6 for an illegal move, 3 against 4 for a German file. Commented where it happens.
+Making them agree means a legality walk over every import, which is the validation ADR-0009 declines.
+
+**Still unmeasured: how long 3,000 games takes** (B-033). The owner's paste was a month of chess.com
+games, not a decade, so the performance question milestone 3 was supposed to answer is still open.
 
 ### Session 6: the import module, and the acceptance criterion it falsified
 
@@ -560,6 +625,30 @@ Session 6:
   simplicity. **It did not save us from getting it wrong** — see the Cyrillic bug — which is a fair
   reminder that a standard library is a tool, not a judgement.
 
+Session 7:
+
+- **Import reports where the user is, and interrupts only when there is a decision.** Every import
+  leaves a line in a strip above the library table; the Add games dialog additionally holds on a
+  result step when there is something to act on. Both render the same `ImportOutcome` component, so
+  the wording cannot drift between them. Decided from mockups after two owner reports pushed in
+  opposite directions — the shape that satisfies both is the asymmetric one.
+- **The Add games dialog is the home for every import source.** Milestone 4 (file), B-012
+  (chess.com) and B-013 (lichess) become tabs in it rather than new screens. **No tab strip while
+  there is one source** — a strip of one is furniture, and greyed-out tabs advertise features that
+  do not exist.
+- **A paste is never sniffed for PGN-ness.** Anything non-empty pasted in the library opens the
+  dialog prefilled, and `pgn-reader` decides. Deciding what a valid game looks like ourselves is the
+  validation ADR-0009 declines — the same rule, applied on the display side for the first time.
+- **The info panel curates, and every curation rule comes from the PGN specification rather than
+  from a source.** `-` and `?` are the spec's placeholders; `TimeControl` is seconds. A format we do
+  not understand prints verbatim rather than being hidden or guessed. That is what keeps one
+  renderer working for chess.com, Scid and a hand-typed file.
+- **`Termination` is shown verbatim and untranslated**, because its value is prose written by
+  whoever produced the file ("X won by resignation"). Localising it means parsing somebody else's
+  sentence, which is not a trade worth making (B-072).
+- **External URLs are text, not links, until B-117.** A bare anchor in a Tauri webview navigates the
+  app window away from the app.
+
 ## Process change made this session
 
 **UI layout is mocked and approved before it is coded.** Added to `AGENTS.md` (mandatory
@@ -637,6 +726,25 @@ The kit is at 0.2.0.
   the whole shape of the module follows from not having one.
 
 ## Recently completed
+
+Session 7:
+
+- **B-007 milestone 3 done and owner-verified in the running app** — the paste path, the Add games
+  dialog, the import strip, and the end of the mock game list. Details in "Active work" above.
+- **`docs/ui-survey.md` gained an import section**, which is the reusable half of the session: how
+  four products handle paste and how they report a failure, with the two findings that would have
+  been guessed wrong.
+- **The info panel was rebuilt** after real data exposed five separate faults in it, four of them
+  not styling. `infoFields.ts` holds the rules and is tested.
+- **A catalogue test was added and immediately earned its keep.** `t("import.summary.ok")` asks for
+  a key the catalogue stores as `ok_one`/`ok_other`, and **a typecheck cannot tell you whether
+  i18next resolves that** — it only proves the key exists in the object. A missing plural renders
+  the raw key to a user, which is the exact failure the typed-key work exists to prevent, arriving
+  through the one door types do not cover.
+- **B-117 raised** (external links through `src/shell/`), **B-105 raised P3 → P2** after the trap
+  caught its own author in a mockup, and **B-097 shrank again**: the error list is of length zero or
+  one, and what it must add is the sentence saying everything after the failure was never read.
+- **`src/mock/games.ts` deleted.** The library holds imported games now.
 
 Session 6:
 
@@ -1062,26 +1170,31 @@ Session 1:
 
 ## Next actions
 
-**Nothing is blocked, nothing is half-built, and everything is committed and pushed.** Every gate CI
-applies is green on the owner's machine — `cargo fmt`, `cargo clippy --all-targets -D warnings`,
-`cargo test`, `npm test`, `typecheck`, `check:i18n`, and the hand-edited `Cargo.lock` survived
-`cargo test` unchanged. Nothing in this session had a visual acceptance criterion, because none of it
-touched UI.
+**Nothing is blocked and nothing is half-built — but session 7 is uncommitted.** Do this first:
 
-1. **B-007 milestone 3 — IPC and the paste path.** `import_pgn_text`; `ipc.ts` gains the call and the
-   result types; a paste target; `LibraryView` reads imported games; `src/mock/games.ts` deleted;
-   error codes get catalogue entries — **there are only three**, `unterminated_comment`,
-   `unterminated_tag` and `parse_failed`, plus whatever wording covers "everything after this point
-   was not read", which is the sentence the report now has to carry.
-   **The Rust side is done and tested**; this milestone is mostly TypeScript, which the AI can verify
-   end to end apart from the window itself. **It is the first point at which a human must look**, and
-   the first honest measurement of how long 3,000 games takes. One `Importer` lives in Tauri state, so
-   ids stay unique across pastes.
-   Then **milestone 4 — file import**, where the file dialog is a platform surface (B-069) and
-   `import_bytes` already exists for it, encoding fallback included.
-3. **B-011 — persistence.** The ADR-0005 migration, now smaller than it was a session ago: no
+0. **Verify and commit session 7.** `npm run typecheck && npm test && npm run check:i18n` and
+   `cargo test --manifest-path src-tauri/Cargo.toml`. The frontend was verified in the AI's container
+   and the feature was exercised in the running app by the owner; **the Rust half — one command and a
+   state struct in `lib.rs` — has only been compiled on the owner's machine**, as always.
+   Suggested split, keeping the reasoning separate from the code it produced:
+   (1) `docs/ui-survey.md` + the B-007 spec (the survey and the decisions);
+   (2) the Rust command + `ipc.ts`;
+   (3) the import UI — dialog, strip, outcome, report, `LibraryView`, `App`, styles, catalogue,
+   and the `src/mock/games.ts` deletion;
+   (4) the info panel — `GameInfo`, `infoFields` + test;
+   (5) backlog + handover, and **rewrite the header paragraph from `git log` afterwards**.
+
+1. **B-007 milestone 4 — file import.** The file dialog behind `src/shell/` (a platform surface,
+   B-069), reading bytes rather than a string — `Importer::import_bytes` already exists for it,
+   Latin-1 fallback included — plus **drag-and-drop onto the library**, deferred from milestone 3 for
+   the same reason. It adds the second tab to the Add games dialog, which is what that shape was
+   chosen for.
+   **Measure the 3,000-game paste while you are there** (B-033): milestone 3 was supposed to produce
+   that number and did not, because the test import was a month of games rather than a decade.
+
+2. **B-011 — persistence.** The ADR-0005 migration, now smaller than it was a session ago: no
    disposition or warning columns, no content key, no accuracy columns.
-4. **B-008 / B-010** — the real table and search, where TanStack arrives and B-033's 200 ms target
+3. **B-008 / B-010** — the real table and search, where TanStack arrives and B-033's 200 ms target
    becomes measurable. Then **`docs/architecture.md`**, the remaining half of B-055.
 
 **Read before continuing B-007:** `docs/adr/0009-strict-pgn-import.md` — its **Stated assumption**
@@ -1301,8 +1414,10 @@ doing it, not a reason to slow down.
   discipline but writing the header from `git log` as the literal last action.
   The split keeps each policy reversal separate from the code that followed it, which is what makes
   `git log` readable as a record of *why* rather than *what*.
-- **Backport the session-5 and session-6 lessons to the kit (B-088), which now carries ten.** The
-  newest are (9) **environment capability claims expire** — "the AI has no Rust toolchain" shaped
+- **Backport the accumulated lessons to the kit (B-088), which now carries eleven.** The newest is
+  (11) **a mockup is a place to catch bugs, not only to settle taste** — session 7's info-panel mock
+  reproduced a trap the same author had written down, two paragraphs above the warning, and it cost
+  nothing because no code existed yet. Before that, (9) **environment capability claims expire** — "the AI has no Rust toolchain" shaped
   three sessions of planning and was false when checked, so check the claim at the start of a session
   that depends on it, and (10) **an acceptance criterion can be wrong about a dependency**, so
   criteria that assert how a library behaves need the same measurement as a performance claim. Both
