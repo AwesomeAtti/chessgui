@@ -159,19 +159,37 @@ established layout is a hard stop.
 │   │   └── shell/          TabBar (document tabs) + SidePanel (the fixed column)
 │   ├── i18n/               message catalogue, typed keys, Intl formatters
 │   ├── model/              the ADR-0005 data model
-│   ├── mock/               placeholder data, deleted at B-007
-│   └── shell/              ipc.ts + platform.ts — the only Tauri-aware code
+│   └── shell/              the only Tauri-aware code — ipc.ts (commands),
+│                           platform.ts (accel keys, separators), files.ts
+│                           (picker + drag-drop), opener.ts (external URLs)
 └── src-tauri/              Rust side, standard Tauri 2 lib/bin split
     ├── Cargo.toml          SPDX GPL-3.0-or-later (B-065)
+    ├── capabilities/       Tauri 2 permissions, per window (added at B-007 M4)
     ├── icons/icon.png      must exist or the build fails in a proc macro
-    ├── src/{main,lib}.rs
+    ├── src/main.rs         binary entry
+    ├── src/lib.rs          the command layer — thin, and the only part the AI
+    │                       container cannot compile
+    ├── src/files.rs        reading PGN files: IO, but no Tauri, so it is tested
+    ├── src/import/         the pure import module (no IO, no Tauri)
     └── tests/              cargo integration tests (fixtures_contract.rs)
 ```
 
+`src/mock/` was deleted at B-007 milestone 3; the library holds imported games.
+
 Three boundaries in that tree are load-bearing rather than tidy:
 
-- **`src/shell/` is the only place `@tauri-apps/api` may be imported.** This is what keeps
-  ADR-0001 reversible. Enforced in CI, not by memory.
+- **`src/shell/` is the only place anything under `@tauri-apps/` may be imported.** This is
+  what keeps ADR-0001 reversible. Enforced in CI, not by memory — and **widened twice at
+  B-007 milestone 4, both times because the rule was used rather than read**: it matched
+  `@tauri-apps/api` only, so the first plugin (`@tauri-apps/plugin-dialog`) would have walked
+  straight past it, and it only inspected *static* imports, so the dynamic `import()` that
+  `ipc.ts` itself uses was never checked at all. Both holes now fire, verified with a negative
+  control.
+
+- **Anything that must be tested lives outside `lib.rs`.** The container has cargo but no
+  system webview libraries, so the Tauri crate cannot be built here and everything in `lib.rs`
+  ships unverified. Keeping it to command signatures and handler registration — with the real
+  work in `files.rs` and `import/` — is what shrinks that unverifiable surface to a few lines.
 - **`src/i18n/` owns every user-facing word** (B-072). Also enforced in CI.
 - **`src/features/board/useChessground.ts` is the only React↔chessground seam.** chessground
   mutates its own DOM subtree; React must never reconcile it. The container div has no React
@@ -189,6 +207,47 @@ Two layout invariants that are easy to break silently:
 - **Fixed measure for text, fluid for graphics.** The side panel is a fixed 320px; the board
   and the table absorb all resize. This is why the board is sized by `ResizeObserver` rather
   than by CSS.
+
+## Dependencies added at B-007 milestone 4
+
+Two first-party Tauri plugins, both `Apache-2.0 OR MIT` — read from the resolved metadata, not
+assumed, per the standing licence constraint. Notify-and-proceed: first-party, conventional,
+and reversible in an afternoon.
+
+| Crate / package | Why |
+|---|---|
+| `tauri-plugin-dialog` | The native file picker. One of the three platform surfaces B-069 lists as open, and the reason file import got its own milestone. Pulls in `tauri-plugin-fs` transitively; **no `fs:` permission is granted** — our own command does the reading, with paths the user chose. |
+| `tauri-plugin-opener` | B-117. In a webview a bare anchor navigates the app window away from the app. |
+
+Adding them created `src-tauri/capabilities/default.json`, which did not exist before. **That
+file is the actual reachable-from-JavaScript surface**, rather than the dependency list, so it
+is worth keeping short: `core:default`, `dialog:allow-open`, `opener:allow-open-url`,
+`opener:allow-default-urls`.
+
+**Those last two are not redundant, and getting that wrong cost two failed fixes.** In Tauri's
+ACL a permission may grant a *command*, a *scope*, or both, and for the opener they are
+separate entries:
+
+- `allow-open-url` — grants the command `open_url`; carries **no scope**.
+- `allow-default-urls` — grants the scope (`mailto:`, `tel:`, `http://*`, `https://*`); its
+  `commands.allow` is **empty**.
+
+Either alone builds green and does nothing at all when clicked. Read from
+`src-tauri/gen/schemas/acl-manifests.json`, which `tauri-build` generates from the plugins'
+own manifests — **that file is the authoritative local answer to what a permission grants, and
+it is the thing to read before editing a capability**, rather than inferring from the name or
+from a documentation summary.
+
+**So capability failures have two shapes and only one is loud.** A wrong identifier is a build
+error. An *incoherent set* — command without scope, or scope without command — is a feature
+that silently does nothing, with the build green, the tests passing, and the button rendering
+correctly. Only clicking it disagrees. When something capability-gated is inert, read the ACL
+manifest, and check the webview console: `src/shell/opener.ts` logs it.
+
+`cargo add` was run against a copy of the manifest to regenerate `Cargo.lock` **by resolution
+rather than by hand** — resolution needs the registry, not a build, so it works in a container
+that cannot compile the Tauri crate. Checked afterwards: 45 crates added, none removed, and no
+existing pin moved. That is a better method than session 6's hand edit and should be reused.
 
 ### The guardrail script earns its place
 

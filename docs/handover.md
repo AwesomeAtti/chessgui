@@ -3,7 +3,37 @@
 > The current state of the project. Update at the end of every session so the next session
 > (human or AI) can resume with zero chat history.
 
-**Last updated:** 2026-08-18 · **Updated by:** AI (Stage 3 / session 7) · **Kit version:** 0.2.0
+**Last updated:** 2026-08-18 · **Updated by:** AI (Stage 3 / session 8) · **Kit version:** 0.2.0
+
+**Session 8 is written to disk and NOT committed.** Head at session start was `f36e6b4`, clean and
+level with `origin/main`. Commit it, push it, then **rewrite this paragraph from `git log`** — that
+is the standing rule and it is the reason this sentence is phrased as a task rather than a claim.
+
+Suggested split — five commits, keeping the reasoning separate from the code as session 7's did:
+
+1. **the reasoning** — `docs/ui-survey.md` + `docs/feature-specs/b007-pgn-import.md`
+2. **the backend** — `src-tauri/src/files.rs`, `src-tauri/src/lib.rs`, `Cargo.toml`, `Cargo.lock`,
+   `capabilities/default.json`
+3. **the shell boundary** — `src/shell/{files,opener,ipc}.ts`, `package.json`,
+   `package-lock.json`, `scripts/check-no-literals.mjs`
+4. **the feature** — `importReport.ts` + its test, `ImportDialog`, `ImportOutcome`, `LibraryView`,
+   `App`, `GameInfo`, `en.ts`, `catalogue.test.ts`, `styles.css`
+5. **the record** — `docs/handover.md`, `docs/backlog.md`, `docs/tech-stack.md`
+
+**Step 4 is deliberately large and should not be split further.** It changes `ImportReport`'s shape
+and every consumer of it in the same breath; separating them produces an intermediate commit whose
+frontend cannot typecheck, which is precisely what session 7 shipped four of. Steps 1–3 change no
+behaviour on their own.
+
+**Verified: the final state.** Each intermediate commit is ordered so it *should* be self-consistent,
+but they have not been checked one at a time — say so rather than implying otherwise.
+
+**`git add` on a missing path aborts the command, and the `git commit` on the next line then commits
+whatever happens to be staged — which may be nothing.** That is how session 7 pushed four commits
+that fail `typecheck`. **Chain every step with `&&`**, or check `git status` between commits. Nothing
+was deleted this session, so the specific trap is absent, but the general one is not.
+
+**Session 7's header, kept for the record:**
 
 **Head at session start:** `ddada37`, clean, level with `origin/main`. Note that session 5's header
 named `72b7d12` as the last commit and there were nine, not eight — `ddada37` ("Close session 5")
@@ -36,7 +66,11 @@ a command that reports success while doing nothing at all.
 procedure rather than an intention: **write the header after the final push, from `git log`, not from
 memory.**
 
-**State in one line:** **the app imports real games and shows them.** B-007 milestones 1–3 are done
+**State in one line (session 8):** **B-007 is done — the app imports real games from a paste, from a
+file picker and from a dropped file, and shows them.** Next is **B-011**, which is what stops the
+library evaporating on quit, and which the B-033 measurement now has an opinion about.
+
+Previous: **the app imports real games and shows them.** B-007 milestones 1–3 are done
 and owner-verified in the running app; a chess.com export pastes in, the games appear in the library,
 open, and play through. Next is milestone 4, file import — after which B-011 gives the library
 somewhere to live across restarts.
@@ -98,7 +132,8 @@ Tauri 2 + React 19 skeleton with a static board, a mock game list, and navigatio
 
 ## Current stage
 
-**Stage 3 — M1 complete and verified; M2 (import) is underway, halfway through B-007.** All gates
+**Stage 3 — M1 complete and verified; M2 (import) is complete: B-007 is done, all four milestones.**
+What M2 still lacks is persistence (B-011), the real table and search (B-008/B-010). All gates
 closed:
 ADR-0001 (Tauri 2), ADR-0002 (GPL-3.0), ADR-0003 (chess libraries), ADR-0004 (SQLite),
 ADR-0005 (data model), ADR-0006 (React 19), ADR-0007 (layout C+), ADR-0008 (import fidelity —
@@ -112,12 +147,122 @@ repository. Risk 5 is downgraded but not closed — see the risk register.
 
 ## Active work
 
-**Nothing is in progress and nothing is half-built. B-007 milestones 1–3 are done, committed and
-pushed; milestone 4 is the next thing to start.**
+**Nothing is in progress and nothing is half-built. B-007 is done. B-011 is the next thing to start.**
 
-Verified: `npm run typecheck`, `npm test` (71), `npm run check:i18n`, `vite build` in the AI's
-container, and **the owner ran the app and used the feature**, which is the verification that matters
-for anything with a visual acceptance criterion.
+Verified this session: `npm run typecheck`, `npm test` (**86**, up from 71), `npm run check:i18n`,
+`vite build`, and on the Rust side **40 tests, `cargo fmt --check` and
+`cargo clippy --all-targets -D warnings` clean** — run in a mirror crate carrying a *copy* of the
+real `Cargo.toml`, then re-run against the sources after they were written back to disk, as a control
+that nothing was mangled in transit.
+
+### What the owner confirmed, and what is still unexercised
+
+**Confirmed in the running app at the end of session 8 — the happy path, in full.** A single file
+dropped on the library tab and on a game tab; a single file containing many games; a single file
+containing one game; several files dropped on both tab kinds; paste on the library; paste on a game
+tab; and the *Choose files…* picker. **That means one of the two new capability entries is proven:
+`dialog:allow-open` works.** The pass also found B-123 and raised B-122, which is the usual result —
+every box was expected to pass, every box passed, and walking them still returned two things.
+
+**Untested, and recorded as untested rather than assumed.** In descending order of what it would
+cost to be wrong:
+
+1. ~~**The info panel's Reference link (B-117).**~~ **Tested, failed, fixed twice, and the second
+   fix is unverified.** Clicking did nothing — no browser, no window, no visible error. The
+   capability needs **both** `opener:allow-open-url` (the command, no scope) and
+   `opener:allow-default-urls` (the scope, no command); **either alone builds green and does
+   nothing**, and the first two attempts here used one each. Read from
+   `src-tauri/gen/schemas/acl-manifests.json`, which `tauri-build` generates from the plugins' own
+   manifests and is the authoritative local answer. **Restart `tauri dev` — the capability is
+   compiled in, so a hot reload will not pick it up.** If it is still inert, the webview console
+   carries the rejection that `src/shell/opener.ts` logs. The other failure to watch for is the app
+   window navigating away from the app, which would mean the button had fallen back to anchor
+   behaviour — the thing B-117 exists to prevent.
+2. **A large import in a window — B-033's remaining half.** *Owner's call: deferred to nearer
+   completion rather than done now.* The measured ~95 ms for 3,000 games
+   *stops at the IPC boundary*. Rendering those rows into a plain `<table>` with no virtualisation is
+   unmeasured, and it is where the 10.2 MiB payload actually lands. `local/pgn/` holds real material
+   for this. If a decade of games feels sticky where a month felt instant, that is a finding and it
+   moves B-008 up.
+3. **Every unhappy path.** *Owner's call: deferred to nearer completion.* The stated blocker was
+   not having sample data — **and that is not
+   true, which is worth recording because it is a documentation failure rather than a testing one.**
+   `fixtures/pgn/` has held nineteen purpose-built cases since B-099, committed before the importer
+   existed, and nothing in the handover or the spec pointed at them as *things to drop on the app*.
+   The three that matter: `unterminated-comment.pgn` (stopped import, named game, byte offset),
+   `latin1-no-declaration.pgn` (**the first time ADR-0009 rule 5 has ever been reachable** — paste
+   cannot trigger it), and `not-pgn-bytes.pgn` (one empty junk row, accepted rather than a bug).
+   Dropping all three together also covers the mixed batch, which is the invariant change.
+4. A dropped folder; *Back* from a result step, keeping the staged list; re-importing the same file
+   twice, which **deliberately** produces duplicate rows and reads as a bug (dedupe is B-022).
+
+**Not verified, and it is the usual list plus one:** the Tauri command signature and handler
+registration, the native file picker, and the drag-drop event all need a window. New this session:
+**`src-tauri/capabilities/default.json` has never been loaded by a running app.** If a permission
+name in it is wrong the picker will fail at runtime with the build entirely green, which is a failure
+mode this project has not had before — so exercise the picker early rather than last.
+
+### Session 8: file import, and the invariant that turned out to be about inputs
+
+**B-007 milestone 4 is done, which finishes B-007.** `src-tauri/src/files.rs` (IO but no Tauri, so it
+is compiled and tested rather than trusted), the `import_pgn_files` command, `src/shell/files.ts` for
+the picker and the window drag-drop event, `src/shell/opener.ts` for B-117, the dialog's Files tab,
+and a per-file report. `src-tauri/capabilities/` exists from this session.
+
+**The finding, and it invalidated a shape rather than a fact.** Everything downstream of milestone 3
+rests on *at most one failure per import*. That is true, and it is a property of **one input** —
+`pgn-reader`'s errors are terminal, so a single string yields zero or one. **Several files are
+several inputs**, so an operation can report a failure followed by later successes: precisely the
+"n games with holes" shape the standing constraint tells us not to build for, arriving legitimately
+because the holes fall *between* files rather than inside one. The constraint is not wrong; its scope
+was never stated, because until now there was only ever one input.
+
+`ImportReport` grew a per-file dimension, and **`failure` stays null for a multi-file report rather
+than being filled with the first one**. That was the tempting version — every milestone-3 consumer
+keeps compiling — and it is the reason not to: it would have shown one problem and hidden the rest,
+silently, which is the exact failure the module exists to prevent.
+
+**Two owner decisions, both taken against what the survey found.** No product in this category stages
+files before importing — Scid vs. PC multi-selects in the OS dialog and goes; the staged-list instinct
+comes from photo libraries, where the question is *which* of 400 images to take. chessgui stages
+anyway, and the reason is the drop path rather than the picker: **a drag is easy to make by accident
+and an OS picker is not**, so naming what was caught is the confirmation — which is also why there is
+no separate "import 3 files?" prompt in front of the dialog. And **a single imported game offers to
+open it**, for drop and paste alike; that is an instance of the standing rule (*the strip always
+records; the dialog additionally stops you when there is a decision*) rather than a new exception to
+it. Lichess does the opposite and navigates straight to the game, which is recorded in the survey
+because it is the closest precedent and it disagrees with us.
+
+**B-033 is measured, and the risk was in the wrong half.** Through the real `Importer`, at the
+shipped `opt-level = "s"`, on two vCPUs: **3,000 games ≈ 95 ms end to end** (40 ms decode+parse,
+23 ms serialise, 32 ms `JSON.parse`) and **10,000 games ≈ 340 ms**. **Parsing is not the cost;
+moving the result is** — the payload is 1.5× the source file, because ADR-0005 puts the verbatim PGN
+in every row and the library table reads none of it. That belongs to B-011, which should keep the PGN
+in the database and fetch it per game. Two things were decided on the number rather than on feel:
+**B-067 progress streaming is not justified for import**, and there was no reason to import one file
+at a time.
+
+**Three faults found by looking at rendered output, and none of them was visible in the code.** The
+UI was rendered headless and screenshotted (B-119), which is new for this project. (1) **Every number
+in the catalogue was interpolated bare** — a real byte offset printed as `2180442`, correct in no
+locale — and i18next's `Intl` formatter had been sitting available and unused since milestone 3.
+(2) An unreadable file reported **"0 games"** beside "this file could not be opened", which reads as
+a measurement rather than a failure. (3) The failure lines under a file were flush with the file
+name, so they read as siblings of it. All three are the same species as session 6's Cyrillic bug:
+**invisible in the code, obvious in the output.**
+
+**The IPC guardrail had two holes, and using it is what found them.** `check:i18n` matched
+`@tauri-apps/api` but not `@tauri-apps/plugin-*` — so the first plugin would have walked past it —
+and it inspected only *static* imports, while `ipc.ts` has used a dynamic `import()` since milestone
+3 specifically to keep Tauri out of a browser bundle. A component copying that pattern would have
+passed. Both now fire, verified with a negative control. **A guardrail nobody has tried to defeat is
+a guardrail with unknown coverage.**
+
+**One method worth reusing: `Cargo.lock` was regenerated by resolution, not by hand.** `cargo add`
+against a copy of the manifest resolves the graph without building, so it works in a container that
+cannot compile the Tauri crate — 45 crates added, none removed, no existing pin moved, all checked.
+Session 6 hand-edited the lock and warned that `cargo test` might normalise it; this removes the
+warning.
 
 ### Session 7: the paste path, and what using it found
 
@@ -714,9 +859,15 @@ The kit is at 0.2.0.
   correct. B-078 is deferred to P3; **do not quote derivability as a constraint on new work.** It
   becomes real at B-015, when annotations are the first data that exists nowhere else — and the answer
   then is an export path (B-017/B-079), not a doctrine.
-- **`src/shell/` is the only place `@tauri-apps/api` may be imported** (ADR-0001). This is the
-  concrete form of the Electron-portability constraint above, and it is now enforced by
-  `npm run check:i18n` in CI rather than by remembering.
+- **`src/shell/` is the only place anything under `@tauri-apps/` may be imported** (ADR-0001). This
+  is the concrete form of the Electron-portability constraint above, and it is enforced by
+  `npm run check:i18n` in CI rather than by remembering. **Widened at session 8, in two ways, both
+  found by using the guardrail rather than reading it:** it named `@tauri-apps/api` only, so the
+  first plugin would have passed, and it checked static imports only, so the dynamic `import()`
+  pattern `ipc.ts` itself uses was never inspected. It now matches the whole namespace in both forms.
+- **Every user-visible number goes through `Intl`** — `{{value, number}}` in the catalogue, never a
+  bare `{{value}}` (session 8). A bare interpolation renders `2180442`, which is right in no locale.
+  This is part of B-072 and was open, unnoticed, from milestone 3 until somebody looked at a picture.
 - **chessground owns its own DOM subtree.** `src/features/board/useChessground.ts` is the only
   React↔chessground seam, and its container div must never be given React children. If that
   slips, React and chessground fight over the same nodes and the symptom — pieces vanishing on
@@ -725,17 +876,60 @@ The kit is at 0.2.0.
   it is a hard stop.
 - **Store the raw thing, derive the useful thing** (ADR-0005). Derived values are never
   authoritative, so a wrong derivation rule is a re-import rather than data loss.
-- **An import error is terminal, and there is at most one per input** (measured, session 6).
+- **An import error is terminal, and there is at most one per input — and "input" is the load-bearing
+  word** (measured session 6; scope corrected session 8).
   `pgn-reader`'s two errors are irrecoverable, so anything downstream — the import report (B-097),
   progress streaming (B-067), chess.com import (B-012) — must be built for "n games and then a wall",
   not for "n games with holes". **Do not write a spec or a UI that promises otherwise**; that is
   exactly the mistake B-007's acceptance criterion made. B-116 is the item that would change it, and
   it is deferred behind a measurement.
+  **Session 8's correction: a *file* is one input, so importing several files legitimately produces
+  several failures — one per file — with successes after them.** That is not a violation of the rule
+  above, it is the rule applied to more than one input at a time, and the distinction matters because
+  the two look identical in a report. Anything that consumes an import result must be built for
+  `0..n` failures, one bounded per input; `src/features/library/importReport.ts` is where this is
+  modelled and `src-tauri/src/files.rs` is where it is tested. **B-012 inherits this directly** — a
+  chess.com account is one input per monthly archive.
 - **`src-tauri/src/import/` never builds a position and never imports `shakmaty`** (ADR-0009). If a
   future change makes it need one, that is a decision to record, not a dependency to add quietly —
   the whole shape of the module follows from not having one.
 
 ## Recently completed
+
+Session 8:
+
+- **B-007 done — milestone 4, file import**, which finishes the feature. Details in "Active work".
+- **B-033 measured.** 3,000 games ≈ 95 ms end to end, 10,000 ≈ 340 ms; the cost is the 1.5× IPC
+  payload rather than the parser. Closes the question milestone 3 was meant to answer and settles
+  B-067 for import.
+- **B-117 done**, folded in because it needed the same `capabilities/` file.
+- **B-069's file-dialog half closed.** Menu-bar conventions and engine binary discovery remain.
+- **B-072 gained a fourth guardrail in practice**: numbers are formatted. It had been wrong since
+  milestone 3.
+- **The IPC guardrail was widened twice** and both holes were confirmed with a negative control.
+- **`docs/ui-survey.md` gained a file-import section** — the reusable half again, including the
+  finding that nobody in the category stages files and the reason we do anyway.
+- **B-118 – B-121 raised.** B-118 is the one to read: the session-start documents are now 227 KB and
+  `AGENTS.md` asks every session to read them first.
+- **B-123 — pasting on a game tab did nothing, found by the owner running the build and fixed the
+  same session.** The `paste` listener was declared inside `LibraryView`, so it existed only while
+  that view was mounted. Moved to `App.tsx`; a paste now takes the same path as a dropped file.
+  **A global gesture declared inside a view is only global while that view is mounted, and the
+  failure mode is silence.** Milestone 4's drag-drop listener went into `App.tsx` for its own
+  reasons, and the two disagreeing is what made the older bug visible.
+- **B-117 shipped broken and took two wrong fixes, which is worth more than the feature.** The
+  capability needs `opener:allow-open-url` **and** `opener:allow-default-urls` — the first grants
+  the command with no scope, the second grants the scope with no command, and **either alone builds
+  green and silently does nothing.** Both wrong versions were arrived at by reasoning from the
+  permission's *name*, once from mine and once from a documentation summary. The machine-readable
+  answer was in the repo the whole time: `src-tauri/gen/schemas/acl-manifests.json`, generated by
+  `tauri-build` from the plugins' own manifests. **The rule to carry: when a capability-gated
+  feature is inert, read the ACL manifest rather than editing the entry you think it should be.**
+  This is risk 9's habit — find the control instead of acting on the plausible story — failing in a
+  new place, twice, before it was applied. Backported to the kit as B-088 (14).
+- **B-122 raised from the same testing pass:** the single-game flow works and is fine for the MVP,
+  but it may be a step longer than it needs to be. Owner's call to revisit, deliberately not
+  guessed at here — it is a feel question.
 
 Session 7:
 
@@ -1179,6 +1373,16 @@ Session 1:
     phrased as a design assumption — "this will be common" needed a number and got a vibe. And
     following the objection through, rather than merely conceding it, is what found B-100: the
     clean sources emit variants, so the gap was in the direction the owner was pointing.
+12. **The cost of starting a session is rising and nobody is watching it.** `docs/handover.md` is
+    116 KB and `docs/backlog.md` is 111 KB, and `AGENTS.md` instructs every session to read both
+    before doing anything. The success condition this file states for itself — "this file plus
+    `docs/backlog.md` should be sufficient" — starts failing when the documents can no longer be read
+    in full, which happens well before they stop being complete. **The shape is familiar: a
+    monotonically rising number that nobody has looked at, where each individual increment is
+    justified.** B-118 proposes the fix (archive per-session narrative, keep decisions). Recorded as
+    a risk rather than only as a backlog item because the thing at stake is the resumability the
+    whole process rests on.
+
 10. **A benchmark nearly produced a false negative against ADR-0001.** macOS Low Power Mode
     capped the machine to 30 fps on mains power, and the first spike run looked like a failure.
     A plain-browser control on the same machine is what caught it (B-077). Any future
@@ -1186,7 +1390,37 @@ Session 1:
 
 ## Next actions
 
-**Nothing is blocked and nothing is half-built — but session 7 is uncommitted.** Do this first:
+**Nothing is blocked and nothing is half-built — but session 8 is uncommitted.** Commit it first;
+the split is in the header.
+
+**Run `npm install` before anything else.** Two frontend packages were added
+(`@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-opener`) and `package.json`/`package-lock.json`
+carry them, but your `node_modules` does not. **Checked on your machine rather than assumed:**
+`npx tsc --noEmit` currently reports exactly two errors, both "cannot find module", and both go away
+with the install. The Rust side needs no equivalent step — `cargo` fetches the two new crates on the
+next build, and `Cargo.lock` already pins them.
+
+The full check afterwards is `npm run typecheck && npm test && npm run check:i18n && npm run build`
+then `cargo test --manifest-path src-tauri/Cargo.toml`, and `cargo clippy --all-targets -- -D
+warnings`, all of which pass in the AI's container except the Tauri crate itself.
+
+1. **B-011 — persistence.** The ADR-0005 migration, and it now has a measurement pointing at its
+   shape: **the IPC payload is 1.5× the source file because the verbatim PGN rides in every row, and
+   the library table never reads it.** Keep the PGN in the database and fetch it for the game the
+   user opens, and the 34 MiB at 10,000 games becomes a few hundred KB. Doing it the other way — one
+   `Vec<Game>` handed across IPC and held in React state — is the version that works at 3,000 games
+   and is felt at 10,000.
+2. **B-008 / B-010** — the real table and search, where TanStack arrives and B-033's remaining half
+   (rendering 10k rows, <200 ms filtered search) becomes measurable. Then `docs/architecture.md`, the
+   remaining half of B-055.
+3. **B-118 — the handover and backlog are 227 KB and every session is told to read both.** Cheap,
+   reversible, and it gets more expensive every session it is deferred.
+
+**Exercise the picker and a drop early when you next run the app.** `capabilities/default.json` is
+new and has never been loaded; a wrong permission name there fails at runtime with a completely green
+build, which is a failure mode this project has not had before.
+
+**Session 7's list, kept for its reasoning:**
 
 0. ~~**Verify and commit session 7.**~~ Done — see the header. Kept for the split that was used: `npm run typecheck && npm test && npm run check:i18n` and
    `cargo test --manifest-path src-tauri/Cargo.toml`. The frontend was verified in the AI's container
@@ -1438,6 +1672,22 @@ doing it, not a reason to slow down.
   that depends on it, and (10) **an acceptance criterion can be wrong about a dependency**, so
   criteria that assert how a library behaves need the same measurement as a performance claim. Both
   are the same species as (7): a sentence that reads like evidence and is really a memory.
+- **Regenerate `Cargo.lock` by resolution, not by hand.** `cargo add` against a *copy* of the
+  manifest in `/tmp` resolves the dependency graph without building anything, so it works in a
+  container that cannot compile the Tauri crate. Session 8 did this for two plugins: 45 crates added,
+  none removed, no existing pin moved — all checked by parsing both locks. This replaces session 6's
+  hand edit and its "check `git diff` in case `cargo test` normalises it" caveat.
+- **The UI can be rendered and looked at without a Tauri window, and it is worth doing** (B-119).
+  A throwaway Vite entry point rendering components with fabricated data, screenshotted through the
+  container's preinstalled Chromium, found three faults in session 8 that a green build could not —
+  all three invisible in the code and obvious in the picture. It does not replace the owner looking
+  at the real app: it is not the Tauri webview, the data is invented, and nothing about it judges
+  whether a layout is *good*. What it changes is that what reaches the owner is a screenshot to react
+  to rather than a description to imagine.
+- **Try to defeat a guardrail occasionally.** `check:i18n` had two holes for months — plugin
+  specifiers and dynamic imports — and both were found by writing code that *should* have tripped it
+  and noticing that nothing happened. A guardrail nobody has attacked has unknown coverage, which is
+  the same species as "verified against fixtures" meaning a script that ran once.
 - **Start the next session with `ai/prompts/session-start.md`.** This file plus `docs/backlog.md`
   should be sufficient — if the next session has to ask something that was settled here, this
   handover failed and is worth fixing rather than working around.
