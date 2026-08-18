@@ -28,6 +28,9 @@ import { useTranslation } from "react-i18next";
 import { formatPgnDate } from "@/i18n/format";
 import { GameResult, type Game, type GameId } from "@/model/game";
 
+import { ImportStrip } from "./ImportStrip";
+import type { ImportReport } from "./importReport";
+
 interface LibraryViewProps {
   games: readonly Game[];
   query: string;
@@ -35,6 +38,22 @@ interface LibraryViewProps {
   selectedId: GameId | null;
   onSelect: (id: GameId) => void;
   onOpen: (id: GameId) => void;
+  /**
+   * Open the Add games dialog, optionally prefilled.
+   *
+   * The prefill is what makes a paste into the library an import: the dialog is the home for
+   * importing, and pasting is a shortcut into it rather than a second way of doing it.
+   */
+  onAddGames: (prefill?: string) => void;
+  /**
+   * The last import's outcome, or null once dismissed.
+   *
+   * It sits here rather than in the dialog because dismissing the dialog must not be the end of
+   * the record — that was the reported problem. Every import leaves a line above the table; only
+   * the ones that need acting on interrupt with the dialog's result step first.
+   */
+  importReport: ImportReport | null;
+  onDismissReport: () => void;
 }
 
 function resultKey(result: Game["result"]) {
@@ -57,6 +76,9 @@ export function LibraryView({
   selectedId,
   onSelect,
   onOpen,
+  onAddGames,
+  importReport,
+  onDismissReport,
 }: LibraryViewProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
@@ -101,12 +123,39 @@ export function LibraryView({
     return () => window.removeEventListener("keydown", onKey);
   }, [filtered, selectedId, onSelect, onOpen]);
 
+  // Pasting anywhere in the library opens the Add games dialog with the pasted text in it.
+  //
+  // **We do not check whether it looks like PGN, and that is deliberate.** Sniffing the text
+  // would be us deciding what a valid game looks like, which is precisely the validation
+  // ADR-0009 declines — `pgn-reader` is the only thing entitled to that opinion. In this view
+  // there is nothing else a paste could mean, so anything non-empty opens the dialog and the
+  // parser answers. Text that is not PGN produces one empty junk row, visibly and removably.
+  //
+  // A `paste` listener rather than reading the clipboard on a keypress: the gesture carries
+  // its own data, so this needs no clipboard permission and no platform branch.
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target !== null && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      if (text.trim() === "") return;
+      event.preventDefault();
+      onAddGames(text);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [onAddGames]);
+
   useEffect(() => {
     activeRow.current?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
 
   return (
     <div className="library-view">
+      {importReport !== null && (
+        <ImportStrip report={importReport} onDismiss={onDismissReport} />
+      )}
+
       <div className="table-region">
         <div className="filter-bar">
           <input
@@ -119,6 +168,9 @@ export function LibraryView({
           <span className="count">
             {t("library.count", { shown: filtered.length, total: games.length })}
           </span>
+          <button type="button" onClick={() => onAddGames()}>
+            {t("library.addGames")}
+          </button>
         </div>
 
         <div className="table-scroll">
@@ -163,11 +215,17 @@ export function LibraryView({
             </tbody>
           </table>
 
-          {filtered.length === 0 && (
-            <p className="notice">
-              {games.length === 0 ? t("library.empty") : t("library.noMatches")}
-            </p>
-          )}
+          {filtered.length === 0 &&
+            (games.length === 0 ? (
+              // Two elements rather than one interpolated string: the catalogue's rule is that
+              // sentences are never assembled from fragments at a call site (B-072).
+              <>
+                <p className="notice">{t("library.empty")}</p>
+                <p className="notice">{t("library.emptyHint")}</p>
+              </>
+            ) : (
+              <p className="notice">{t("library.noMatches")}</p>
+            ))}
         </div>
       </div>
     </div>

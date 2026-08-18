@@ -213,10 +213,21 @@ button {
 /* The library is a single full-width region: the table is the artefact in this view and
    anything beside it competes with the width W5 needs. The fixed panel belongs to the game
    view only (ADR-0007, amended). */
+/*
+ * A column rather than a one-cell grid, because the import strip is an optional first child.
+ * Flex handles "one child or two" without a placeholder row; a grid with fixed rows would put
+ * the table in the strip's row whenever there was no strip, and the table would lose its
+ * height. `min-height: 0` on the growing child is what keeps the window-is-the-viewport rule.
+ */
 .library-view {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
+}
+
+.library-view > .table-region {
+  flex: 1 1 auto;
   min-height: 0;
 }
 
@@ -420,35 +431,96 @@ button {
 
 /* Info list ---------------------------------------------------------------- */
 
-.info-list {
-  margin: 0;
+/*
+ * Info panel — curated groups, then every tag behind a disclosure.
+ *
+ * The flat two-column list this replaces had one structural fault worth remembering: its
+ * `grid-template-columns: auto minmax(0, 1fr)` let the longest key in the *file* set the label
+ * width. With chess.com's `CurrentPosition` that is 42 characters, inside a 320px panel, so
+ * every value was squeezed into what was left. Labels here are sized by the labels.
+ */
+.info-panel {
   padding: var(--gap);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 2px 10px;
   user-select: text;
   -webkit-user-select: text;
 }
 
-.info-list dt {
+.info-group {
+  margin-bottom: 14px;
+}
+
+.info-group h3 {
+  margin: 0 0 5px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   color: var(--text-muted);
 }
 
-.info-list dd {
-  margin: 0;
+/* Label left, value right, value free to wrap without dragging the label with it. */
+.info-row,
+.info-player {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 1px 0;
+}
+
+.info-key {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.info-value {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.info-player-name {
+  font-weight: 600;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.info-list .info-section {
-  grid-column: 1 / -1;
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--line);
+.info-player-elo {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.info-pair {
-  display: contents;
+.info-tags summary {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/*
+ * The raw set. Stacked rather than two-column: these values are the long ones — a FEN, two
+ * URLs — and stacking gives each of them the full panel width instead of a squeezed column.
+ */
+.info-tag-list {
+  margin: 6px 0 0;
+  font-size: 0.92em;
+}
+
+.info-tag {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.info-tag dt {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.info-tag dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Utilities ---------------------------------------------------------------- */
@@ -463,4 +535,160 @@ button {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Add games dialog (B-007 milestone 3) ------------------------------------- */
+
+/*
+ * Native <dialog>, so the top layer, the backdrop, Escape and the focus trap are the
+ * platform's rather than ours. The width is in `ch` because the content is PGN text and
+ * translated prose: a pixel width that fits English clips at the ~35% expansion B-072
+ * requires, and PGN lines are measured in characters anyway.
+ */
+.import-dialog {
+  width: min(72ch, 90vw);
+  max-height: 82vh;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.import-dialog::backdrop {
+  background: color-mix(in srgb, CanvasText 28%, transparent);
+}
+
+/*
+ * A column rather than fixed grid rows: the two steps have different children — box and
+ * Import on one, outcome and Done on the other — and a `grid-template-rows` tuned to one of
+ * them silently mislays the other. Only the middle child grows.
+ */
+.import-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: var(--gap);
+  max-height: 82vh;
+  min-height: 0;
+}
+
+.import-input,
+.import-result {
+  flex: 1 1 auto;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 1.15em;
+}
+
+.dialog-label {
+  color: var(--text-muted);
+}
+
+.import-input {
+  min-height: 8lh;
+  min-width: 0;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  line-height: 1.4;
+  color: inherit;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 6px 8px;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Import outcome — shown in the dialog's result step and in the library strip ---- */
+
+/*
+ * One component, two layouts. The strip runs the sentences together on a line; the dialog
+ * stacks them. Nothing about *which* sentences appear differs between the two, which is what
+ * keeps this one pattern rather than two vocabularies for the same event.
+ */
+.import-outcome-block .import-summary {
+  display: block;
+  font-weight: 600;
+  font-size: 1.05em;
+  margin-bottom: 6px;
+}
+
+.import-outcome-block .import-failure-game,
+.import-outcome-block .import-reason,
+.import-outcome-block .import-stopped {
+  display: block;
+}
+
+.import-outcome-block .import-failure-game {
+  font-weight: 600;
+}
+
+.import-outcome-block .import-stopped {
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.import-outcome-inline {
+  display: inline;
+  min-width: 0;
+}
+
+.import-outcome-inline .import-summary {
+  font-weight: 600;
+}
+
+.import-outcome-inline > * + *::before {
+  /* A separator in CSS rather than in the markup, so no component concatenates a sentence. */
+  content: " ";
+}
+
+.import-outcome-inline .import-stopped {
+  color: var(--text-muted);
+}
+
+.import-strip {
+  display: flex;
+  gap: var(--gap);
+  align-items: baseline;
+  flex: 0 0 auto;
+  padding: 6px var(--gap);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-sunken);
+}
+
+.import-strip-dismiss {
+  margin-left: auto;
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.import-strip-dismiss:hover {
+  background: var(--surface-raised);
+  border-color: var(--line);
+}
+
+/* The dialog's result step: the box and Import are gone, so this row grows instead. */
+.import-result {
+  min-height: 0;
+  overflow: auto;
+  padding: 2px;
+}
+
+.import-result:focus-visible {
+  outline: 2px solid var(--selection-strong);
+  outline-offset: 2px;
 }
