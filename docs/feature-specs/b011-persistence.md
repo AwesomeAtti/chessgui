@@ -1,7 +1,7 @@
 # Feature Spec: Local persistence (SQLite)
 
 - **Backlog ID:** B-011
-- **Status:** in-progress (session 9) — M1–M3 built, not committed (no git access this session); M2 needs `cargo build` on the owner's machine, M4 is owner verification. See `docs/handover.md`'s "Session 9" section.
+- **Status:** in-progress (session 9) — M1–M3 built and committed (`297f3e0`, `f03b584`, `3e47802`), not pushed; M2 needs `cargo build` on the owner's machine, M4 is owner verification. See `docs/handover.md`'s "Session 9" section.
 - **Owner:** Brian
 
 ## Goal

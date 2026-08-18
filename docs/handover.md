@@ -3,7 +3,144 @@
 > The current state of the project. Update at the end of every session so the next session
 > (human or AI) can resume with zero chat history.
 
-**Last updated:** 2026-08-18 · **Updated by:** AI (Stage 3 / session 8) · **Kit version:** 0.2.0
+**Last updated:** 2026-08-18 · **Updated by:** AI (Stage 3 / session 9) · **Kit version:** 0.2.0
+
+**Session 9 is committed in three increments, not pushed.** `297f3e0` the spec and ADR-0004
+addendum · `f03b584` M1, the SQLite layer · `3e47802` M2+M3 together, the Tauri wiring and the
+frontend that reads it. This paragraph's own commit (docs) is fourth and not yet nameable, same
+reasoning session 8 settled on: name the content commits, then say the header commit exists.
+
+**Unusual session, worth recording as its own finding.** This session ran through a file-staging
+bridge with no shell inside the repo *and* a separate device-shell with real `git` — the two
+were not the same tool, and using them together is what made local commits possible without a
+full clone. What blocked every single commit was a stale lock file (`.git/index.lock`, then
+`.git/HEAD.lock`) that git itself creates and fails to clean up on this particular mount — a
+sandbox permission wall, not a repository problem: `rm`, `mv`, and Python's `os.remove()` all
+returned `Operation not permitted` on a file with ordinary-looking `0600` permissions owned by
+the same uid running the command. **The device-shell could not delete it either time** — the
+owner had to run `rm -f` from a real terminal before each commit, three times this session (the
+count matters: it recurred *after every successful commit*, not just the first, because each
+commit's own internal lock cleanup fails the same way). `GIT_INDEX_FILE` pointed at a scratch
+path outside the mount avoided the *index* half of this permanently; nothing avoided the *HEAD*
+half. **If a future session hits "fatal: cannot lock ref 'HEAD'" or "Unable to create
+.git/index.lock: File exists" here, this is why, and the fix is the owner running one `rm -f`,
+not a repository repair.** Also confirmed and worth keeping: `git ls-remote` (read-only) fails
+with a proxy 403 from the device-shell, so this bridge has no network access at all — push has
+never been possible from here and was never attempted.
+
+**State in one line (session 9):** **B-011 (persistence) has a spec, and M1–M3 of its four
+milestones are built and committed.** M1 (the SQLite layer, `db.rs`) and M3 (the frontend) are
+both verified in this session's own sandbox — compiled, tested, linted, and for the frontend
+additionally typechecked, built, and screenshotted headless. **M2 (wiring into Tauri, in
+`lib.rs`/`files.rs`) is written but not compiled** — same standing constraint as every Tauri-layer
+change before it (no system webview libraries in the sandbox). M4 (owner verification: restart
+persistence, open a game) has not run. See "Session 9" below for the full account, and the
+acceptance checklist in `docs/feature-specs/b011-persistence.md` for exactly what is and is not
+yet ticked.
+
+### Session 9: B-011 persistence, milestones 1–3
+
+**Read `docs/feature-specs/b011-persistence.md` first** — decisions made, and why. Five
+notify-and-proceed calls: `rusqlite` with the `bundled` feature; one connection behind a `Mutex`,
+not a pool; numbered SQL migrations tracked by `PRAGMA user_version`, no framework; the database
+lives in Tauri's app-data directory; and the in-memory `Importer` identity scheme retires — the
+database assigns every `GameId`/`PlayerId` on insert now, which is what `lib.rs` had been saying
+was B-011's job since session 8. A clarification surfaced in review and is now in both the spec
+and an ADR-0004 addendum: the `pgn` column on each row (ADR-0005) and the original file on disk
+(ADR-0004) are two different "source of truth" claims — the row is self-sufficient for normal
+operation, the file is what the whole-database rebuild promise depends on.
+
+**M1 — `src-tauri/src/db.rs` and `src-tauri/migrations/0001_initial.sql`, both compiled and
+tested.** Same split as `import/` and `files.rs`: real IO, no Tauri, verified in a mirror crate
+per `rust_verification.md`. **One addition to that method this session**: the mirror crate used a
+*trimmed* `Cargo.toml` — `pgn-reader`, `serde`, `serde_json`, `unicode-normalization`, and now
+`rusqlite`, but not `tauri`/`tauri-build`/the two plugins. Confirmed by trying the full manifest
+first and watching it fail: `tauri`'s dependency graph pulls in `gdk-sys`, whose build script
+needs `pkg-config` to find `gdk-3.0`, which the sandbox does not have — the same "no system
+webview libraries" constraint `rust_verification.md` already names, now with the actual failure
+on record rather than inferred. 10 new tests in `db.rs` cover: an empty migrated database, a
+no-op re-migration, round-tripping a game through `list_games`/`get_game`, `list_games` never
+carrying `tags` or `pgn`, an unknown id returning `None`, the same player across two *separate*
+import calls resolving to one row, **two new players with the same name in *one* batch also
+resolving to one row** (the risk the spec flagged — a `SELECT` then `INSERT` inside one
+transaction, in order, is what makes this hold), a nameless player never pooled, first-spelling-
+wins on re-import, and ids being real row ids rather than two independent `Importer` counters
+both starting at zero.
+
+**M2 — `src-tauri/src/lib.rs` and `src-tauri/src/files.rs`, written, fmt-checked for syntax, not
+compiled.** `ImportState` (the `Mutex<Importer>`) is gone; a fresh `Importer::new()` per call is
+now exactly as correct, because ids no longer need to survive between calls. `DbState` replaces
+it — one `Mutex<rusqlite::Connection>`, opened and migrated in `.setup()` against
+`app.path().app_data_dir()`. **`import_pgn_text` and `import_pgn_files` now return
+`Result<_, AppError>`, which changes a documented policy** — milestones 3–4 said explicitly that
+those commands "return no `Result`" because a refused game is data under ADR-0009. That reasoning
+still holds for *parsing*; it never covered *persistence*, and a database write can fail for
+reasons that have nothing to do with the PGN (full disk, a poisoned migration). Both commands'
+`Ok` value still carries every parse-time refusal as data, unchanged; `Err` is reserved for the
+database. Two new commands, `list_games` and `get_game`, complete the pair the spec calls for.
+`files.rs`'s own test suite grew one case for this: a connection with no schema applied makes
+every insert fail, standing in for "the database is unavailable" — the one case in that module
+that is now a `Result::Err` rather than a per-file outcome. **This whole file is unverifiable
+here, as always** — the syntax was checked with `rustfmt` against a scratch copy of the module
+tree (parses clean, one formatting diff applied), which is weaker than a type-check and is not a
+substitute for the owner's build.
+
+**M3 — the frontend, verified against the real toolchain in this session's sandbox**, which
+turned out to be available here (`node`/`npm` were not assumed present before this session; they
+are). `npm ci` against a staged copy of `package.json`/`package-lock.json`, then `npm run
+typecheck && npm test && npm run check:i18n && npm run build` — all green, both **before** any
+change (86 tests, confirming the baseline this handover already claimed) and **after**.
+`src/model/game.ts` splits `Game` into `GameSummary` (hot fields, what `Game` used to be minus
+`tags`/`pgn`) and `Game extends GameSummary` (adds them back) — `LibraryView` now takes
+`GameSummary[]`. `src/shell/ipc.ts` gets `TextImportResult` (replacing the old `ImportSummary`
+shape — `imported: GameId[]` instead of `games: Game[]`), the `FileOutcome` "imported" variant
+loses its `summary` field for the same `imported`/`errors` pair, and `listGames`/`getGame` wrap
+the two new commands. `App.tsx` no longer holds imported games in a growing array — `games` is
+now `GameSummary[]` re-read with `listGames()` on mount and after every import; opening a game
+fetches its full `Game` with `getGame` into a `gameDetails` map, *before* switching to its tab, so
+`GameView` never has to handle a game that is not fully loaded. `importReport.ts` and its test
+file follow the same shape change; **no behavioural logic in that module changed**, only the
+input type — the report-building rules (single-failure semantics, the multi-file "several
+inputs" shape, the single-game-offer, when the dialog closes) are untouched and their existing
+tests pass unmodified in substance.
+
+**One extra check beyond what the spec required**: `LibraryView` was rendered headless
+(Playwright against the pre-installed Chromium, same method as `visual_verification.md`) in two
+states — an empty database and a populated one with a non-Latin name (`Müller, Jörg` / `Núñez,
+Inés`) and a clean-import strip — to confirm the `Game`→`GameSummary` prop-type change didn't
+silently break rendering. It didn't; both screenshots are pixel-normal, unicode names render
+correctly. The harness (`src/_preview.tsx`, `preview.html`) was deleted afterward, as the
+practice requires — nothing in the delivered files depends on it.
+
+**Not done this session, and next:** M4 (owner-run: restart the app, confirm persistence; open a
+game, confirm the PGN/detail renders) and the M2 build itself. `npm install` is not newly needed
+(no frontend package changes beyond source), but `cargo` will need to fetch `rusqlite` and its
+several transitive crates on the first build — this is the first Rust dependency added since the
+two Tauri plugins in session 8, and `Cargo.lock` was regenerated by resolution (not by hand,
+following the session-8 method): 8 new crates added (`rusqlite` and its dependency graph), none
+removed, no existing pin moved except `hashbrown` gaining an additional coexisting version, which
+is normal. Read `docs/feature-specs/b011-persistence.md`'s acceptance checklist before closing
+B-011 — several boxes there are specifically "owner-verified" and cannot be ticked from here.
+
+**Committed in three increments, from `git log` after the fact — the split ended up slightly
+different from what was planned mid-session, because M2 and M3 landed together rather than
+separately** (the frontend and the Tauri wiring it depends on were staged together and it was not
+worth a fourth lock-clearing round-trip to split them; M2 remains separately identifiable in the
+diff by file):
+
+1. `297f3e0` — `docs/adr/0004-storage-sqlite.md`, `docs/feature-specs/b011-persistence.md`: the
+   spec and the two-sources-of-truth clarification, reviewable independent of any code.
+2. `f03b584` — `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, `src-tauri/migrations/0001_initial.sql`,
+   `src-tauri/src/db.rs`: M1, compiled and tested before this commit was made.
+3. `3e47802` — `src-tauri/src/lib.rs`, `src-tauri/src/files.rs` (M2, buildable only on the
+   owner's machine — **run `cargo build` before trusting this half**) plus `src/model/game.ts`,
+   `src/shell/ipc.ts`, `src/App.tsx`, `src/features/library/importReport.ts`,
+   `src/features/library/importReport.test.ts`, `src/features/library/LibraryView.tsx` (M3,
+   verified in this session's sandbox as described above).
+4. This commit — `docs/backlog.md`, `docs/handover.md`: close the session, header written last.
+
+**Not pushed.** The bridge this session used has no network access (see the note above); run
+`git push` from a real terminal to publish these four commits to `origin/main`.
 
 **Session 8 is committed and pushed in five increments**, written from `git log` after the push
 rather than from memory — `fa8a14c` the survey and the spec · `83edb12` the Rust file reader and the
@@ -144,10 +281,12 @@ repository. Risk 5 is downgraded but not closed — see the risk register.
 
 ## Active work
 
-**Nothing is in progress and nothing is half-built. B-007 is done. B-011 is the next thing to start.**
+**B-011 is in progress: M1–M3 built and delivered (not committed), M2's build and M4 (owner
+verification) are next.** See "Session 9" above for the full account. Nothing else is half-built.
 
-Verified this session: `npm run typecheck`, `npm test` (**86**, up from 71), `npm run check:i18n`,
-`vite build`, and on the Rust side **40 tests, `cargo fmt --check` and
+Session 8's own verification, kept for the record: `npm run typecheck`, `npm test` (**86**, up
+from 71), `npm run check:i18n`, `vite build`, and on the Rust side **40 tests, `cargo fmt --check`
+and
 `cargo clippy --all-targets -D warnings` clean** — run in a mirror crate carrying a *copy* of the
 real `Cargo.toml`, then re-run against the sources after they were written back to disk, as a control
 that nothing was mangled in transit.
@@ -1387,12 +1526,29 @@ Session 1:
 
 ## Next actions
 
-**Nothing is blocked, nothing is half-built, and session 8 is committed and pushed.**
+**Immediate — finish B-011.** Session 9's four commits are local, not pushed (see "Session 9"
+above for the hashes and why `git push` was never possible from this session's bridge). In order:
 
-**`npm install` after pulling.** Two frontend packages arrived this session
+1. `git push`.
+2. Run `cargo build --manifest-path src-tauri/Cargo.toml` — this is M2's first real verification,
+   never possible in the sandbox. `cargo` fetches `rusqlite` and its transitive crates on this
+   build; `Cargo.lock` already pins them (regenerated by resolution, not by hand).
+3. Run the full check chain: `npm run typecheck && npm test && npm run check:i18n && npm run
+   build`, then `cargo test --manifest-path src-tauri/Cargo.toml` and `cargo clippy
+   --all-targets -- -D warnings`.
+4. M4: run the app, import something, quit, relaunch, confirm it's still there; open a game,
+   confirm the PGN/detail renders. Tick the acceptance checklist in
+   `docs/feature-specs/b011-persistence.md` as each item is actually observed, not assumed.
+5. If M2's build or M4 surfaces anything, fix it, commit, and push that on top before starting
+   B-008/B-010 — B-011 is not done until M4 is actually observed, not until the code compiles.
+
+**Session 8's next actions, kept for the record — the two Tauri plugins are already in this
+Cargo.lock along with rusqlite, so this `npm install` note is still live:**
+
+**`npm install` after pulling.** Two frontend packages arrived that session
 (`@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-opener`); without the install, `tsc` reports
 exactly two "cannot find module" errors and nothing else. The Rust side needs no equivalent step —
-`cargo` fetches the two new crates on the next build and `Cargo.lock` already pins them.
+`cargo` fetches new crates on the next build and `Cargo.lock` already pins them.
 
 The full check afterwards is `npm run typecheck && npm test && npm run check:i18n && npm run build`
 then `cargo test --manifest-path src-tauri/Cargo.toml`, and `cargo clippy --all-targets -- -D
