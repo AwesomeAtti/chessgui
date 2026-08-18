@@ -58,14 +58,40 @@ function check(file) {
 
   const visit = (node) => {
     // Rule 2 — the IPC boundary.
+    //
+    // **Widened twice at B-007 milestone 4, and both holes were found by using it rather than
+    // by reading it.** It previously matched `@tauri-apps/api` only, as a *static* import.
+    //
+    // - Plugins are a different specifier. `@tauri-apps/plugin-dialog` is every bit as much a
+    //   Tauri API as `@tauri-apps/api/core`, and the first plugin arriving is exactly when a
+    //   rule naming only one of them silently stops holding.
+    // - `import()` is a call expression, not an import declaration, so dynamic imports were
+    //   never checked at all. That is not hypothetical: `src/shell/ipc.ts` has used a dynamic
+    //   import since milestone 3, precisely so the Tauri API stays out of a browser bundle. A
+    //   component copying that pattern would have passed this check.
+    //
+    // Matching the whole `@tauri-apps/` namespace rather than a list of packages, so the next
+    // plugin needs no change here. Only `src/` is scanned, so build-time packages are unaffected.
+    const tauriSpecifier = (spec) => spec.startsWith("@tauri-apps/");
+    const reportBoundary = (spec) =>
+      report(
+        node,
+        `imports "${spec}" outside src/shell/ — route it through src/shell/ (ADR-0001)`,
+      );
+
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const spec = node.moduleSpecifier.text;
-      if (!inShell && spec.startsWith("@tauri-apps/api")) {
-        report(
-          node,
-          `imports "${spec}" outside src/shell/ — route it through src/shell/ipc.ts (ADR-0001)`,
-        );
-      }
+      if (!inShell && tauriSpecifier(spec)) reportBoundary(spec);
+    }
+
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length > 0 &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) {
+      const spec = node.arguments[0].text;
+      if (!inShell && tauriSpecifier(spec)) reportBoundary(spec);
     }
 
     // Rule 1a — text typed directly into JSX.

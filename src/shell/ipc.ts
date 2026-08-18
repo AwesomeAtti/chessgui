@@ -69,6 +69,37 @@ export interface ImportSummary {
   readonly errors: readonly ImportFailure[];
 }
 
+/** Which decoder read a file's bytes. Mirrors `Encoding` in `src-tauri/src/import/model.rs`. */
+export type ImportEncoding = "utf8" | "latin1";
+
+/**
+ * What one file produced. Mirrors `FileOutcome` in `src-tauri/src/files.rs`.
+ *
+ * A discriminated union rather than optional fields, for the same reason it is one on the Rust
+ * side: a file either reached the parser or never got that far, and the two cases share no
+ * data.
+ */
+export type FileOutcome =
+  | {
+      readonly kind: "imported";
+      readonly summary: ImportSummary;
+      readonly encoding: ImportEncoding;
+    }
+  | {
+      readonly kind: "unreadable";
+      /** Stable code, mapped to wording by the frontend (B-072). Never displayed raw. */
+      readonly code: string;
+      /** The OS message, untranslated. Diagnostics only — it carries no path. */
+      readonly detail: string;
+    };
+
+/** One file's worth of import. Mirrors `FileImport` in `src-tauri/src/files.rs`. */
+export interface FileImport {
+  /** Base name only. The backend never sends the directory. */
+  readonly name: string;
+  readonly outcome: FileOutcome;
+}
+
 /** Mirrors `AppInfo` in `src-tauri/src/lib.rs`. */
 export interface AppInfo {
   readonly name: string;
@@ -132,4 +163,21 @@ export function getAppInfo(): Promise<IpcResult<AppInfo>> {
  */
 export function importPgnText(text: string): Promise<IpcResult<ImportSummary>> {
   return invoke<ImportSummary>("import_pgn_text", { text });
+}
+
+/**
+ * Import one or more PGN files by path (B-007 milestone 4).
+ *
+ * Returns one entry per path, in the order given, so the caller can pair results with what it
+ * asked for. An unreadable file is that entry's outcome rather than a failed call, exactly as a
+ * refused game is data rather than an error.
+ *
+ * **This is the call that breaks the "at most one failure" assumption**, and every consumer
+ * needs to know it: that invariant belongs to a single input, and several files are several
+ * inputs. See `src-tauri/src/files.rs`.
+ */
+export function importPgnFiles(
+  paths: readonly string[],
+): Promise<IpcResult<readonly FileImport[]>> {
+  return invoke<readonly FileImport[]>("import_pgn_files", { paths });
 }
