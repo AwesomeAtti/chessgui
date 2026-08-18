@@ -13,6 +13,8 @@
 
 pub mod import;
 
+use std::sync::{Mutex, PoisonError};
+
 use serde::Serialize;
 
 /// Machine-readable error returned to the frontend.
@@ -62,10 +64,37 @@ fn app_info() -> AppInfo {
     }
 }
 
+/// The importer, held for the life of the process (B-007 milestone 3).
+///
+/// **Stateful on purpose, and this is the only reason it lives here rather than being created
+/// per call:** `Importer` hands out game and player ids, so pasting twice must not reissue the
+/// same id, and the same player appearing in two pastes should be one player. Games are held by
+/// the frontend for now; B-011 replaces both the storage and this identity scheme.
+#[derive(Default)]
+struct ImportState(Mutex<import::Importer>);
+
+/// Import pasted PGN text.
+///
+/// **Returns no `Result`, and that is the policy rather than an oversight.** Under ADR-0009 a
+/// refused game is *data* — an entry in `errors` — not a failed command, and there is no input
+/// for which the importer has nothing to say: bytes that are only PGN by extension produce one
+/// empty junk row. So the command cannot fail, and the frontend has no error branch to write for
+/// it beyond the transport failures `ipc.ts` already models.
+#[tauri::command]
+fn import_pgn_text(text: String, state: tauri::State<'_, ImportState>) -> import::ImportSummary {
+    // A poisoned lock is recovered from rather than reported. The guarded state is two
+    // counters and a name map: a panic mid-import can cost at most a skipped id, which is
+    // invisible, and there is no user-facing failure worth inventing a code for. If this ever
+    // guards something with an invariant, that reasoning expires.
+    let mut importer = state.0.lock().unwrap_or_else(PoisonError::into_inner);
+    importer.import_text(&text)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![app_info])
+        .manage(ImportState::default())
+        .invoke_handler(tauri::generate_handler![app_info, import_pgn_text])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
