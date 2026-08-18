@@ -3,22 +3,53 @@
 > The current state of the project. Update at the end of every session so the next session
 > (human or AI) can resume with zero chat history.
 
-**Last updated:** 2026-08-17 · **Updated by:** AI (Stage 3 / session 5) · **Kit version:** 0.2.0
+**Last updated:** 2026-08-18 · **Updated by:** AI (Stage 3 / session 6) · **Kit version:** 0.2.0
 
-**Head at session start:** `760dcc9`, clean, level with `origin/main`. **Session 5 is committed and
-pushed in eight increments** — `620b4b7`, `a10a18d`, `f058ba4`, `8ffbf4a`, `d3c7f18`, `255baa6`,
-`6206d42`, `72b7d12`. `origin/main` is at `72b7d12`; `git log origin/main..HEAD` is empty and the tree
-is clean. Verified at close rather than predicted, because this header has carried a stale claim in
-three consecutive sessions and did again mid-session: it said "session 5's work is uncommitted", which
-was true when written and false an hour later.
+**Head at session start:** `ddada37`, clean, level with `origin/main`. Note that session 5's header
+named `72b7d12` as the last commit and there were nine, not eight — `ddada37` ("Close session 5")
+came afterwards, exactly the staleness the rule below exists to prevent, in the very session that
+wrote the rule.
+
+**Session 6's work is in the working tree and NOT committed at the time of writing**, because the AI
+cannot run git writes from its sandbox. **This line is stale the moment you commit — rewrite it from
+`git log`, which is the procedure below, not an intention.** Files touched: `src-tauri/src/import/`
+(five new), `src-tauri/tests/import_corpus.rs` (new), `src-tauri/src/lib.rs`, `src-tauri/Cargo.toml`,
+`src-tauri/Cargo.lock`, `fixtures/pgn/expected.json`, `fixtures/README.md`,
+`docs/adr/0009-strict-pgn-import.md`, `docs/feature-specs/b007-pgn-import.md`, `docs/backlog.md`,
+this file.
 
 **Written last, deliberately.** That is the rule this file keeps breaking, so here it is as a
 procedure rather than an intention: **write the header after the final push, from `git log`, not from
 memory.**
 
-**State in one line:** M1 closed and owner-verified; the project now has a test harness, an 18-fixture
-PGN corpus, and a settled import policy in **ADR-0009 — the libraries validate, we add nothing**. The
-import path is started: **B-007 milestone 1 is measured and done**. Next is milestone 2.
+**State in one line:** M1 closed and owner-verified; the project has a test harness, an 18-fixture PGN
+corpus, a settled import policy in **ADR-0009 — the libraries validate, we add nothing** — and now a
+working importer: **B-007 milestones 1 and 2 are done and the corpus is a guard rather than a
+record**. Next is milestone 3, IPC and the paste path, which is the first point at which a human must
+look.
+
+**One standing constraint changed, and it changes how to plan every future session.** Previous
+handovers said the AI environment has no Rust toolchain, so "every session from here produces Rust
+that only you can compile". **That is no longer true**: this session's container has `cargo` 1.95 and
+crates.io access, and milestone 2's Rust was written, compiled, tested, fmt-checked and clippy-clean
+before it was handed over. What it still cannot do is build the *Tauri* crate (no system webview
+libraries) or install an old toolchain (`static.rust-lang.org` is blocked while crates.io is not), so
+the app itself and anything needing a window remain yours. See the notes at the end.
+
+**Session 6 in a paragraph.** A state review recommended B-007 milestone 2 and the owner approved it,
+choosing "measure first, then implement" for the one question the spec left open. The measurement ran
+in the AI's own container — which turned out to have Rust — and it answered that question and then
+falsified an acceptance criterion. The `Result` tag and the movetext termination marker are **both
+reported by `pgn-reader` and never reconciled** (tag `1-0`, marker `0-1`, same game), so the spec's
+"prefer the tag *and* agree with chessops" was not satisfiable; the tag wins. Worse, **`pgn-reader`'s
+two errors are irrecoverable**: an unterminated `{` swallows the rest of the input, so the promised
+"3,000 games with 4 bad ones imports 2,996" is unreachable — at most one error, and everything after
+it is gone. **Owner's call: no resynchronisation**, fix the criterion, pin the behaviour, and let
+B-101 decide whether to revisit (**B-116**). The module then landed with 32 tests, and writing them
+caught a real bug in my own accent-stripping: Unicode decomposition also decomposes Cyrillic `й`, so
+`Анатолий` was being rewritten as `анатолии` — a different player. Along the way **B-094 closed for
+free**: the declared MSRV of 1.77.2 was already false, because `pgn-reader` declares 1.88 and
+`shakmaty` declares 1.95.
 
 **Session 5 in a paragraph, for anyone who does not want the detail below.** It began as a state
 review that recommended B-099 — and B-099 turned out not to be startable, because the project had no
@@ -42,7 +73,8 @@ Tauri 2 + React 19 skeleton with a static board, a mock game list, and navigatio
 
 ## Current stage
 
-**Stage 3 — M1 skeleton complete and verified; M2 (import) is next.** All gates closed:
+**Stage 3 — M1 complete and verified; M2 (import) is underway, halfway through B-007.** All gates
+closed:
 ADR-0001 (Tauri 2), ADR-0002 (GPL-3.0), ADR-0003 (chess libraries), ADR-0004 (SQLite),
 ADR-0005 (data model), ADR-0006 (React 19), ADR-0007 (layout C+), ADR-0008 (import fidelity —
 accepted, amended, then **superseded**), and **ADR-0009 (strict import), which is the live policy**.
@@ -55,9 +87,69 @@ repository. Risk 5 is downgraded but not closed — see the risk register.
 
 ## Active work
 
-**Nothing is in progress. M1 is fully verified and closed. M2 starts next, at B-049.**
+**Nothing is half-built. B-007 milestones 1 and 2 are done; milestone 3 is the next thing to start.**
 
-### Session 4 so far: the M1 verification pass, and what it returned
+The one piece of unfinished business is not code: **session 6's changes are uncommitted**, because the
+AI cannot write git state. Run the verification commands in "Next actions" first, then commit.
+
+### Session 6: the import module, and the acceptance criterion it falsified
+
+**B-007 milestone 2 is done.** `src-tauri/src/import/` is a pure module — no IO, no database, no
+Tauri — with `mod.rs` (the `Importer`), `model.rs` (ADR-0005 in Rust), `decode.rs` (UTF-8 with a
+Latin-1 fallback), `derive.rs` (dates, names, results, ratings) and `visitor.rs` (the `pgn-reader`
+visitor, which collects and counts and decides nothing). Plus `tests/import_corpus.rs`, which is what
+turns `expected.json` from a record into a guard.
+
+**Three measurements and one bug, in the order they mattered.**
+
+**1. `pgn-reader` reports the `Result` tag and the termination marker separately and reconciles
+neither.** The spec said to prefer the tag *and* to prefer agreeing with `chessops`; on
+`result-contradicts-final-token.pgn` those are different answers — tag `1-0`, marker `0-1`, and
+chessops takes the marker. **The tag wins**, because ADR-0005 derives every hot field from tags, and
+the marker is the fallback for a file with no `Result` tag at all (which `missing-roster-tags.pgn`
+is). So the library table and a chessops-derived view disagree about that one game, deliberately.
+
+**2. The entire error vocabulary is two messages, and both are terminal — this is the finding.**
+`unterminated tag` and `unterminated comment`, read out of the crate's own source rather than inferred
+from behaviour, so the error codes are a closed set with one fallback for the release that grows a
+third (B-063). Measured on a `clean · unterminated-comment · clean` input: the unclosed `{` swallows
+the third game, the error's byte span runs to end of input, and `has_more()` goes false. **So there is
+at most one error per input and every game after it is lost**, which falsifies B-007's criterion that
+"a file of 3,000 games containing 4 the parser refuses imports 2,996 rows and reports 4 errors". The
+criterion is corrected in the spec rather than the behaviour bent to meet it.
+
+**The owner's call was no resynchronisation, and the reasoning is worth keeping.** A forward scan for
+the next `[Event ` would recover the lost games, and would not weaken "the libraries are the
+validator" — every recovered game is still parsed in full by `pgn-reader`. What it adds is our own
+permanent judgement about where a game begins, for an event **nobody has counted**. B-101's un-run
+half is that count, so it becomes **B-116**, deferred with an explicit trigger. The asymmetry decided
+it: adding recovery later is fifteen lines and a fixture, removing it once shipped is not. Meanwhile
+the failure is loud — a stable code, the byte offset past which nothing was read, and the failing
+game's `White`/`Black`/`Date`, which are available because the tag section parses before the movetext
+fails.
+
+**3. B-094 closed without compiling anything.** The declared MSRV of `1.77.2` was already false:
+`pgn-reader 0.29.0` declares `rust-version = "1.88"` and the `shakmaty 0.30.1` it pulls in declares
+`1.95`. A build on 1.77.2 would have failed at resolution, not on our source. Corrected to `1.95`,
+matching what CI has pinned all along. **The cheapest possible check was reading the dependencies'
+manifests, and in four sessions nobody had.**
+
+**4. The bug, and it is the eighth entry in the pattern.** ADR-0005 specifies `normalisedName` as
+accent-stripped, so `derive.rs` decomposes with `unicode-normalization` and drops combining marks.
+That is the standard technique and it is wrong for Cyrillic: **`й` is `и` plus a combining breve**, so
+`Анатолий` was being rewritten as `анатолии` — a different name, which would match a different player.
+`ё`/`е` is the same trap. A mark is now dropped only when it sits on a Latin letter, and the result is
+recomposed. **Nothing about reading the code would have shown this**; a test with a Cyrillic name did,
+and it took one line to write.
+
+**What is verified and what is not.** 32 Rust tests pass, `cargo fmt --check` and
+`cargo clippy --all-targets -D warnings` are clean, and all eighteen fixtures reproduce session 5's
+macOS measurements exactly — **run in the AI's container, which turns out to have Rust**. That last
+point is the control that makes the rest credible rather than asserted. What is **not** verified: the
+full `cargo test` including the Tauri crate, because the container has no system webview libraries.
+Nothing in this session touched UI, so nothing has a visual acceptance criterion.
+
+### Session 4: the M1 verification pass, and what it returned
 
 **B-054 — M1 skeleton is DONE and now observed rather than assumed.** The owner walked the eight
 secondary paths the previous handover left unticked, and **all eight pass**: the filter box
@@ -431,6 +523,36 @@ Session 5:
   that got there was **"why are we hashing at all?" rather than "is the hash correct?"** The second
   question cannot reach the first, and I asked the second.
 
+Session 6:
+
+- **The `Result` rule: the tag wins, the termination marker is the fallback, and they are never
+  reconciled.** Measured — `pgn-reader` hands back both without comment. Consistent with ADR-0005
+  ("hot fields derive from tags") and inconsistent with `chessops`, which prefers the marker, on
+  exactly one fixture. Recorded in ADR-0009's risk table rather than fixed, because making them agree
+  means one side second-guessing the other and the verbatim PGN carries both readings.
+- **Duplicate tags: first one wins**, which is what chessops does, so at least that one agrees. The
+  losing value is never lost — it is in the verbatim PGN, which is why a map is an acceptable shape
+  for a format that permits repeats. `expected.json` now records both `importTags` (what the parser
+  reported, repeats included) and `importedTags` (what the importer kept), and **the difference
+  between those two columns is the decision made visible**.
+- **An absent tag is not an unknown value.** No `Date` tag gives `raw: ""`, deliberately
+  distinguishable from a literal `"????.??.??"`. This is where milestone 1's finding gets spent:
+  `pgn-reader` reports tags truthfully where `chessops` fabricates `?` defaults, so the importer can
+  tell "the file said nothing" from "the file said unknown", and so can the frontend.
+- **A nameless player is never pooled with other nameless players.** A file with no `White` tag
+  normalises to the empty string, and pooling those would assert that every anonymous player in every
+  import is the same person — a silent false merge, which is precisely the failure mode ADR-0008's
+  content hash was deleted for risking.
+- **No import resynchronisation (B-116, deferred with a trigger).** See the session-6 section above
+  and ADR-0009's addendum. The trigger is B-101's loose-file half.
+- **MSRV corrected to `1.95` (B-094 closed).** Set by the dependency graph, not by our source.
+- **One new dependency: `unicode-normalization` (notify-and-proceed).** MIT OR Apache-2.0, so
+  GPL-3.0-or-later compatible — checked before adding, per the standing constraint; its one
+  dependency `tinyvec` is Zlib OR Apache-2.0 OR MIT and was already in the graph via Tauri. Added
+  because ADR-0005 specifies accent-stripping and hand-rolling Unicode is the wrong kind of
+  simplicity. **It did not save us from getting it wrong** — see the Cyrillic bug — which is a fair
+  reminder that a standard library is a tool, not a judgement.
+
 ## Process change made this session
 
 **UI layout is mocked and approved before it is coded.** Added to `AGENTS.md` (mandatory
@@ -497,8 +619,47 @@ The kit is at 0.2.0.
   it is a hard stop.
 - **Store the raw thing, derive the useful thing** (ADR-0005). Derived values are never
   authoritative, so a wrong derivation rule is a re-import rather than data loss.
+- **An import error is terminal, and there is at most one per input** (measured, session 6).
+  `pgn-reader`'s two errors are irrecoverable, so anything downstream — the import report (B-097),
+  progress streaming (B-067), chess.com import (B-012) — must be built for "n games and then a wall",
+  not for "n games with holes". **Do not write a spec or a UI that promises otherwise**; that is
+  exactly the mistake B-007's acceptance criterion made. B-116 is the item that would change it, and
+  it is deferred behind a measurement.
+- **`src-tauri/src/import/` never builds a position and never imports `shakmaty`** (ADR-0009). If a
+  future change makes it need one, that is a decision to record, not a dependency to add quietly —
+  the whole shape of the module follows from not having one.
 
 ## Recently completed
+
+Session 6:
+
+- **B-007 milestone 2 done — the pure import module, and the first Rust this project has shipped
+  verified.** `src-tauri/src/import/` (five files) plus `src-tauri/tests/import_corpus.rs`. 32 tests,
+  `cargo fmt --check` clean, `cargo clippy --all-targets -D warnings` clean, and all eighteen fixtures
+  reproducing session 5's macOS numbers exactly. Details in "Active work" above.
+- **`expected.json` is now a guard rather than a record.** Milestone 1 measured and asserted nothing,
+  deliberately — asserting before a human has read the output is how a test certifies a bug. A human
+  read it, so `importOutcome`, `importErrorCode`, `importTokens` and the new `importedTags` are
+  assertions on the Rust side, with a fixture-count guard so a moved corpus fails loudly instead of
+  passing with zero iterations.
+- **A second corpus test pins the loss.** `the_whole_corpus_imports_as_one_input_and_loses_everything_
+  after_the_bad_game` asserts that the games following an unterminated comment do not arrive. It looks
+  like a test of a bug and is really a test of a decision: **if anyone adds resynchronisation (B-116),
+  this is where they have to say so.**
+- **A real bug found by writing a test, not by review: Cyrillic `й` decomposes.** Stripping combining
+  marks turned `Анатолий` into `анатолии`. Marks are now dropped only on Latin bases and the result is
+  recomposed. **This is the eighth time on this project that measurement has overturned reasoning**,
+  and the first where the wrong reasoning was inside a technique borrowed *because* it was the
+  standard one.
+- **B-094 closed by reading three manifests.** MSRV was declared 1.77.2; `pgn-reader` requires 1.88
+  and `shakmaty` requires 1.95. Corrected to 1.95, which CI already pinned.
+- **B-116 raised and deferred with an explicit trigger** rather than left as an open worry.
+- **ADR-0009 gained a session-6 addendum**, `docs/feature-specs/b007-pgn-import.md` had an acceptance
+  criterion struck through and replaced, and `fixtures/README.md`'s field table was brought up to date
+  — it still described a manifest with no import columns at all.
+- **`Cargo.lock` was updated by hand** for the one new crate, so CI's `--locked` build does not fail
+  on a stale lock. `cargo test` will normalise it if the hand edit is off; check `git diff` before
+  committing.
 
 Session 5:
 
@@ -857,7 +1018,17 @@ Session 1:
     plan rests on how often something happens, find the control *first*, because the cost of
     running one is minutes and the cost of acting on a plausible story is rework plus a false
     belief that outlives it.
-    **Updated session 5 — this is now seven, and two of them are new in kind.** The *sixth* was the
+    **Updated session 6 — this is now nine, and the two new ones are both about *our own* code
+    again.** The *eighth* is the Cyrillic accent-stripping bug: a technique adopted precisely because
+    it was the standard one (Unicode decomposition) is wrong for a whole writing system, because
+    `й` is a letter that happens to decompose. It looked correct, it passed review, and one test with
+    a Russian name in it failed. **The instructive part is that the flaw was invisible in the code and
+    obvious in the output** — the same reason B-054's verification pass found three things on paths
+    that all passed. The *ninth* is the acceptance criterion for B-007 that could not be met: "no
+    error causes the other games to be lost" was written from how errors *ought* to work, and
+    `pgn-reader`'s are irrecoverable. **A specification can be wrong about a dependency in exactly the
+    way a risk register can**, and the check was a three-line test file.
+    **Updated session 5 — this was seven, and two of them were new in kind.** The *sixth* was the
     first found inside an *accepted ADR*; the *seventh* is the first where the wrong reasoning was
     about **a dependency's behaviour** rather than our own code, and where two libraries turned out to
     fail differently from each other rather than one of them failing. Details below. B-099's fixtures measured ADR-0008 rule 3b's premise and it is false: chessops honours the
@@ -884,41 +1055,55 @@ Session 1:
 
 ## Next actions
 
-**Nothing is blocked and nothing is half-built.** Everything session 5 touched is committed, pushed,
-and green on every gate CI applies — `npm test` (32), `typecheck`, `check:i18n`, `vite build`,
-`cargo fmt`, `cargo clippy --all-targets -D warnings`, `cargo test`. No claim below rests on "should
-work", and nothing in this session had a visual acceptance criterion, because none of it touched UI.
+**Nothing is blocked and nothing is half-built — but session 6 is uncommitted.** Do this first:
 
-1. **B-007 milestone 2 — the pure import module.** `src-tauri/src/import/`: PGN text in, `Game` values
-   plus whatever `pgn-reader` refused out. Hot fields from tags per ADR-0005, `result` as an integer,
-   `PgnDate` raw plus parsed, full tag map retained, verbatim PGN byte-preserved, `plyCount` from a
-   token count, UTF-8 with a Latin-1 fallback. **No positions, no FEN handling, no legality walk** —
-   that is ADR-0009, and milestone 1 measured what it costs.
-   **The one thing to measure rather than assume:** which `Result` `pgn-reader` reports when the tag
-   and the termination marker disagree. The milestone-1 probe printed tag *names* only, so this is
-   genuinely open. `Visitor::outcome()` reports the marker separately from `tag()`, so the importer
-   will have both and must choose — prefer the tag, and prefer agreeing with chessops if they conflict,
-   but *look first*.
-   Then assert the measured numbers in `expected.json` (`importOutcome`, `importTags`, `importTokens`)
-   from the Rust side, which is what turns that manifest from a record into a guard.
-2. **B-007 milestone 3 — IPC and the paste path**, then **milestone 4 — file import**. Milestone 3 is
-   the first point at which a human must look, and the first honest measurement of how long 3,000
-   games takes.
+0. **Verify and commit session 6.** In a real terminal, from the repository root:
+   `cargo fmt --manifest-path src-tauri/Cargo.toml --check`,
+   `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`,
+   `cargo test --manifest-path src-tauri/Cargo.toml`, and `npm test && npm run typecheck &&
+   npm run check:i18n` for the untouched half.
+   **All three cargo commands passed in the AI's container** against a mirror crate holding the same
+   sources and the same pinned `pgn-reader 0.29.0` — what it could not build is the Tauri crate
+   itself, for want of system webview libraries, so the first run on your machine is the first time
+   the whole thing compiles together. **Check `git diff src-tauri/Cargo.lock`**: the lock was edited
+   by hand for `unicode-normalization`, and `cargo test` will correct it silently if the edit was off.
+   Suggested commit split, which keeps the policy change separate from the code that follows it, as
+   sessions 3 and 5 did: (1) ADR-0009 addendum + spec correction + `fixtures/README.md`; (2) the
+   import module + corpus test + `expected.json`; (3) `Cargo.toml`/`Cargo.lock`/`lib.rs`; (4) backlog
+   + handover.
+1. **B-007 milestone 3 — IPC and the paste path.** `import_pgn_text`; `ipc.ts` gains the call and the
+   result types; a paste target; `LibraryView` reads imported games; `src/mock/games.ts` deleted;
+   error codes get catalogue entries — **there are only three**, `unterminated_comment`,
+   `unterminated_tag` and `parse_failed`, plus whatever wording covers "everything after this point
+   was not read", which is the sentence the report now has to carry.
+   **The Rust side is done and tested**; this milestone is mostly TypeScript, which the AI can verify
+   end to end apart from the window itself. **It is the first point at which a human must look**, and
+   the first honest measurement of how long 3,000 games takes. One `Importer` lives in Tauri state, so
+   ids stay unique across pastes.
+   Then **milestone 4 — file import**, where the file dialog is a platform surface (B-069) and
+   `import_bytes` already exists for it, encoding fallback included.
 3. **B-011 — persistence.** The ADR-0005 migration, now smaller than it was a session ago: no
    disposition or warning columns, no content key, no accuracy columns.
 4. **B-008 / B-010** — the real table and search, where TanStack arrives and B-033's 200 ms target
    becomes measurable. Then **`docs/architecture.md`**, the remaining half of B-055.
 
-**Read before starting B-007:** `docs/adr/0009-strict-pgn-import.md` — in particular its **Stated
-assumption** (all input is English SAN) and its **Accepted risks** table, which is measured on both
-libraries and is the difference between implementing this policy and re-deriving it. ADR-0008 is kept
-as history; its main body is no longer what we do.
+**Read before continuing B-007:** `docs/adr/0009-strict-pgn-import.md` — its **Stated assumption**
+(all input is English SAN), its **Accepted risks** table, measured on both libraries, and now its
+**session-6 addendum**, which narrows how rule 1 should be read: a file *is* the unit of failure for
+everything after a refused game. ADR-0008 is kept as history; its main body is no longer what we do.
+The module's own `mod.rs` header carries the same summary, so the next person to open the code does
+not have to find the ADR first.
 
 ### Waiting on the owner, not on the code
 
 Neither of these blocks anything above; both make later work better-founded.
 
-- **B-101 — point the survey at loose PGN files.** `npm run survey:pgn -- <path>`; the output is
+- **B-101 — point the survey at loose PGN files. It now gates a real decision (B-116), which raises
+  its value.** Session 6 measured that one unterminated comment costs every game after it in the same
+  input, and the owner's call was not to resynchronise *because nobody has counted how often that
+  happens*. The survey is the count. If loose files contain unterminated comments, build B-116; if
+  they do not, the deferral is settled rather than merely convenient. Original note follows.
+  `npm run survey:pgn -- <path>`; the output is
   safe to paste as-is, since paths print relative to the input. The chess.com corpus is already measured
   and recorded, and it is a *clean-source* sample: it told us the tag surface and nothing about the
   malformed tail, which is what ADR-0008 rules 4 and 5 exist for. **The number to read first is
@@ -1001,11 +1186,31 @@ doing it, not a reason to slow down.
   "fix" it in the build config.
 - **The B-048 spike was built and run outside this repo and is not tracked here.** Nothing from
   it should be committed. If a `spike/` directory turns up inside the repo, it is a mistake.
-- **Practical note on running spikes:** the AI environment is a Linux sandbox with no Rust
-  toolchain, so anything requiring `cargo` or a macOS window has to be run by hand in a real
-  terminal. **This is now permanent, not spike-specific** — every session from here produces
-  Rust that only you can compile. Plan for the AI to deliver frontend work verified and Rust
-  work unverified, and say so in the handover each time rather than implying otherwise.
+- **CORRECTED IN SESSION 6 — the AI environment does have Rust, and the old note below was wrong in
+  a way worth understanding.** The container has `cargo` 1.95 and reaches crates.io, so milestone 2's
+  Rust was compiled, tested, `fmt`-checked and clippy-clean *before* handover, and its measurements
+  reproduced session 5's macOS numbers on all eighteen fixtures — which is the control that makes
+  "verified" mean something rather than "ran somewhere". **What it still cannot do:** build the Tauri
+  crate (no system webview libraries — this is why `cargo test` in the repo is still yours to run),
+  open a window, or install an old toolchain, because `static.rust-lang.org` is blocked while
+  crates.io is not. **The method that made this work is worth reusing: a mirror crate in `/tmp`
+  holding the same sources, the same pinned dependency versions and a copy of `fixtures/`**, so the
+  code under test is identical and only the Tauri shell is missing.
+  **The method has a failure mode, and it fired within the hour: the mirror must mirror the
+  *manifest* too.** The mirror declared `rust-version = "1.77.2"` while the delivered `Cargo.toml`
+  declared `1.95`, and **clippy gates lints on the declared MSRV** — so `manual_is_multiple_of` was
+  suppressed in the mirror and produced three errors on the owner's machine, in a leap-year
+  expression. The mirror was a control for the code and not for the configuration, and the field that
+  differed was the one field this session changed. **Copy `Cargo.toml` into the mirror rather than
+  writing a plausible one**, and re-run clippy after any manifest change.
+  **The lesson is not "the sandbox changed".** It is that a capability claim in this file went
+  unchecked for three sessions and shaped how work was planned — the same species as "verified against
+  fixtures" meaning a script that was run once. **Environment claims expire; check them, cheaply, at
+  the start of a session that depends on one.** Original note, kept because its *conclusion* still
+  holds for anything needing a window: the AI environment is a Linux sandbox, so anything requiring a
+  macOS window has to be run by hand in a real terminal. Plan for the AI to deliver frontend work
+  verified, pure Rust verified, and the Tauri app unverified, and say which in the handover each time
+  rather than implying otherwise.
   `src-tauri/icons/icon.png` is now in place, so that particular proc-macro failure is handled;
   macOS Low Power Mode still silently invalidates performance measurements.
 - **CI paid for itself on its first run.** The Windows job failed with `icons/icon.ico not
@@ -1090,14 +1295,21 @@ doing it, not a reason to slow down.
 - **An instrument that summarises where you needed raw data is worse than none.** The milestone-1
   probe's first version printed a token count when the lists differed — precisely on the two fixtures
   it existed to explain. It looked like an answer. Print the data, let a human judge.
-- **Session 5 was committed and pushed in eight increments.** `620b4b7` harness · `a10a18d` corpus ·
-  `f058ba4` ADR-0008 amendment · `8ffbf4a` contract test strengthened · `d3c7f18` + `255baa6` ADR-0009 ·
-  `6206d42` milestone-1 measurement · `72b7d12` English-SAN assumption. The split keeps each policy
-  reversal separate from the code that followed it, which is what makes `git log` readable as a record
-  of *why* rather than *what*.
-- **Backport the session-5 lessons to the kit (B-088), which now carries eight.** The two newest are
-  (7) "verified against fixtures" is a claim about a moment unless the fixtures are committed, and
-  (8) ask for the test harness at the point the methodology first says "verify before claiming done".
+- **Session 5 was committed and pushed in *nine* increments, not eight.** `620b4b7` harness ·
+  `a10a18d` corpus · `f058ba4` ADR-0008 amendment · `8ffbf4a` contract test strengthened · `d3c7f18` +
+  `255baa6` ADR-0009 · `6206d42` milestone-1 measurement · `72b7d12` English-SAN assumption ·
+  **`ddada37` close-session commit, which the session-5 header could not know about because it was
+  written before it.** That is the third consecutive handover whose header undercounted its own
+  session, in the session that wrote down the rule against it — which suggests the fix is not more
+  discipline but writing the header from `git log` as the literal last action.
+  The split keeps each policy reversal separate from the code that followed it, which is what makes
+  `git log` readable as a record of *why* rather than *what*.
+- **Backport the session-5 and session-6 lessons to the kit (B-088), which now carries ten.** The
+  newest are (9) **environment capability claims expire** — "the AI has no Rust toolchain" shaped
+  three sessions of planning and was false when checked, so check the claim at the start of a session
+  that depends on it, and (10) **an acceptance criterion can be wrong about a dependency**, so
+  criteria that assert how a library behaves need the same measurement as a performance claim. Both
+  are the same species as (7): a sentence that reads like evidence and is really a memory.
 - **Start the next session with `ai/prompts/session-start.md`.** This file plus `docs/backlog.md`
   should be sufficient — if the next session has to ask something that was settled here, this
   handover failed and is worth fixing rather than working around.
