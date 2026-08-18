@@ -62,15 +62,15 @@ export interface PgnDate {
 }
 
 /**
- * A game as the UI sees it: players joined, hot fields promoted, full tag set retained.
- *
- * Note what is *not* here: no move list, no variations, no annotations. M1's board is
- * static (B-054) and the MVP is read-only (B-050). The game tree arrives with B-009.
+ * A game's hot fields — players joined, everything else promoted straight out of the tags.
+ * **Never carries `tags` or `pgn`** (B-011): this is what the library table fetches, and the
+ * library table never reads either — carrying them anyway is what made the B-033 IPC payload
+ * 1.5x the source file. See [`Game`] for the full record, fetched only when a game is opened.
  */
-export interface Game {
+export interface GameSummary {
   readonly id: GameId;
 
-  // Hot fields — promoted to indexed columns in storage, strictly derived from `tags`.
+  // Hot fields — indexed columns in storage, strictly derived from `tags`.
   readonly white: Player;
   readonly black: Player;
   readonly event: string | null;
@@ -104,7 +104,16 @@ export interface Game {
   // reports accuracy only in its JSON, never as a PGN tag, and the MVP imports PGN — so nothing the
   // MVP does could ever populate them. B-012 re-adds them with the importer that can. The decision
   // to store them (B-104, ADR-0005 addendum) stands; only its timing was wrong.
+}
 
+/**
+ * A game in full: [`GameSummary`] plus the complete tag set and the verbatim PGN. Fetched only
+ * when the user opens a game (B-011) — the library table renders from [`GameSummary`] alone.
+ *
+ * Note what is *not* here: no move list, no variations, no annotations. M1's board is
+ * static (B-054) and the MVP is read-only (B-050). The game tree arrives with B-009.
+ */
+export interface Game extends GameSummary {
   /**
    * The complete tag set (B-060), including tags we do not promote and tags we have
    * never heard of. Nothing from a PGN file is silently discarded.

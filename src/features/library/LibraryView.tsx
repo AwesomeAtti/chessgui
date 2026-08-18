@@ -26,13 +26,13 @@ import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { formatPgnDate } from "@/i18n/format";
-import { GameResult, type Game, type GameId } from "@/model/game";
+import { GameResult, type GameId, type GameSummary } from "@/model/game";
 
 import { ImportStrip } from "./ImportStrip";
 import type { ImportReport } from "./importReport";
 
 interface LibraryViewProps {
-  games: readonly Game[];
+  games: readonly GameSummary[];
   query: string;
   onQueryChange: (query: string) => void;
   selectedId: GameId | null;
@@ -56,7 +56,7 @@ interface LibraryViewProps {
   onDismissReport: () => void;
 }
 
-function resultKey(result: Game["result"]) {
+function resultKey(result: GameSummary["result"]) {
   switch (result) {
     case GameResult.WhiteWin:
       return "notation.whiteWin" as const;

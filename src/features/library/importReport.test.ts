@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Game } from "@/model/game";
-import type { FileImport, ImportFailure, ImportSummary } from "@/shell/ipc";
+import type { FileImport, ImportFailure, TextImportResult } from "@/shell/ipc";
 
 import {
   buildFileImportReport,
@@ -11,27 +10,6 @@ import {
   IMPORT_REASON_KEYS,
   shouldCloseAfterImport,
 } from "./importReport";
-
-/** A game shaped like the importer's output. Only the count matters to this module. */
-function game(id: number): Game {
-  return {
-    id,
-    white: { id: 1, name: "Vasquez, Marta", normalisedName: "vasquez, marta" },
-    black: { id: 2, name: "Oyelaran, Tunde", normalisedName: "oyelaran, tunde" },
-    event: null,
-    site: null,
-    date: { raw: "", parsed: null, year: null, month: null },
-    round: null,
-    result: null,
-    eco: null,
-    ecoUrl: null,
-    whiteElo: null,
-    blackElo: null,
-    plyCount: 0,
-    tags: {},
-    pgn: "",
-  };
-}
 
 function failure(overrides: Partial<ImportFailure> = {}): ImportFailure {
   return {
@@ -46,9 +24,13 @@ function failure(overrides: Partial<ImportFailure> = {}): ImportFailure {
   };
 }
 
-function summary(games: number, errors: readonly ImportFailure[] = []): ImportSummary {
+/** A persisted-import result shaped like the backend's output. Only the count matters here. */
+function summary(
+  games: number,
+  errors: readonly ImportFailure[] = [],
+): TextImportResult {
   return {
-    games: Array.from({ length: games }, (_, index) => game(index)),
+    imported: Array.from({ length: games }, (_, index) => index),
     errors,
   };
 }
@@ -163,9 +145,10 @@ describe("shouldCloseAfterImport", () => {
 // --- Milestone 4: several files are several inputs -------------------------------------
 
 function imported(name: string, games: number, errors: readonly ImportFailure[] = []): FileImport {
+  const { imported, errors: errs } = summary(games, errors);
   return {
     name,
-    outcome: { kind: "imported", summary: summary(games, errors), encoding: "utf8" },
+    outcome: { kind: "imported", imported, errors: errs, encoding: "utf8" },
   };
 }
 
@@ -257,7 +240,7 @@ describe("buildFileImportReport", () => {
     // fallback is how a mis-decoded name gets into a library and stays.
     const latin1: FileImport = {
       name: "old.pgn",
-      outcome: { kind: "imported", summary: summary(2), encoding: "latin1" },
+      outcome: { kind: "imported", ...summary(2), encoding: "latin1" },
     };
     expect(buildFileImportReport([latin1]).files?.[0]?.encoding).toBe("latin1");
   });

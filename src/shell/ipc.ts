@@ -18,7 +18,7 @@
  * negative in B-048 (see B-077).
  */
 
-import type { Game } from "@/model/game";
+import type { Game, GameId, GameSummary } from "@/model/game";
 
 /** Machine-readable error. Mirrors `AppError` in `src-tauri/src/lib.rs`. */
 export interface AppError {
@@ -63,9 +63,18 @@ export interface ImportFailure {
   readonly date: string | null;
 }
 
-/** Mirrors `ImportSummary` in `src-tauri/src/import/model.rs`. */
-export interface ImportSummary {
-  readonly games: readonly Game[];
+/**
+ * What one `import_pgn_text` call persisted. Mirrors `TextImportResult` in
+ * `src-tauri/src/lib.rs`.
+ *
+ * **No full `Game` values here** (B-011) — that is the fix for the B-033 finding that the IPC
+ * payload was 1.5x the source file because every row carried its own verbatim PGN over the
+ * wire, and the library table never read it. `imported` is just the new, stable ids the
+ * database assigned; re-read the library with [`listGames`] and fetch one game with
+ * [`getGame`].
+ */
+export interface TextImportResult {
+  readonly imported: readonly GameId[];
   readonly errors: readonly ImportFailure[];
 }
 
@@ -82,7 +91,8 @@ export type ImportEncoding = "utf8" | "latin1";
 export type FileOutcome =
   | {
       readonly kind: "imported";
-      readonly summary: ImportSummary;
+      readonly imported: readonly GameId[];
+      readonly errors: readonly ImportFailure[];
       readonly encoding: ImportEncoding;
     }
   | {
@@ -155,22 +165,24 @@ export function getAppInfo(): Promise<IpcResult<AppInfo>> {
 }
 
 /**
- * Import pasted PGN text.
+ * Import pasted PGN text and persist whatever parsed.
  *
- * The backend command returns no error of its own: under ADR-0009 a refused game is data in
- * `errors`, not a failed call. An `IpcResult` failure here therefore means the transport
- * failed — running outside Tauri, most likely — and not that the PGN was bad.
+ * **Parsing still cannot fail in the ADR-0009 sense**: a refused game is data in `errors`, not a
+ * failed call. What changed at B-011 is that persistence can fail — a database error (full disk,
+ * a poisoned connection) now surfaces as a real `IpcResult` failure with the backend's own error
+ * code, not only as the transport failure ("running outside Tauri") this used to be the sole
+ * cause of. See the note at the top of `src-tauri/src/lib.rs`.
  */
-export function importPgnText(text: string): Promise<IpcResult<ImportSummary>> {
-  return invoke<ImportSummary>("import_pgn_text", { text });
+export function importPgnText(text: string): Promise<IpcResult<TextImportResult>> {
+  return invoke<TextImportResult>("import_pgn_text", { text });
 }
 
 /**
- * Import one or more PGN files by path (B-007 milestone 4).
+ * Import one or more PGN files by path (B-007 milestone 4) and persist whatever parsed.
  *
  * Returns one entry per path, in the order given, so the caller can pair results with what it
- * asked for. An unreadable file is that entry's outcome rather than a failed call, exactly as a
- * refused game is data rather than an error.
+ * asked for. An unreadable file or a refused game is that entry's outcome rather than a failed
+ * call, exactly as before B-011. A database failure is a failed call — see `importPgnText`.
  *
  * **This is the call that breaks the "at most one failure" assumption**, and every consumer
  * needs to know it: that invariant belongs to a single input, and several files are several
@@ -180,4 +192,21 @@ export function importPgnFiles(
   paths: readonly string[],
 ): Promise<IpcResult<readonly FileImport[]>> {
   return invoke<readonly FileImport[]>("import_pgn_files", { paths });
+}
+
+/**
+ * Every game in the database, hot fields only (B-011). **Never carries `tags` or `pgn`** — see
+ * [`GameSummary`].
+ */
+export function listGames(): Promise<IpcResult<readonly GameSummary[]>> {
+  return invoke<readonly GameSummary[]>("list_games");
+}
+
+/**
+ * One game in full, including `tags` and the verbatim `pgn` (B-011). `value` is `null` when
+ * `id` does not exist — there is no delete path yet, so in practice that means a stale id from
+ * before the database was dropped and rebuilt.
+ */
+export function getGame(id: GameId): Promise<IpcResult<Game | null>> {
+  return invoke<Game | null>("get_game", { id });
 }

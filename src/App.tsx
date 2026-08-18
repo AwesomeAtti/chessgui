@@ -29,12 +29,14 @@ import {
 } from "@/features/library/importReport";
 import { LibraryView } from "@/features/library/LibraryView";
 import { GameView } from "@/features/game/GameView";
-import type { Game, GameId } from "@/model/game";
+import type { Game, GameId, GameSummary } from "@/model/game";
 import {
   getAppInfo,
+  getGame,
   importPgnFiles,
   importPgnText,
   isShellAvailable,
+  listGames,
   type AppInfo,
 } from "@/shell/ipc";
 import { choosePgnFiles, onPgnFileDrop } from "@/shell/files";
@@ -49,10 +51,16 @@ interface OpenGame {
 export default function App() {
   const { t } = useTranslation();
 
-  // **The library lives here, in memory, for the life of the process** (B-007 milestone 3).
-  // Games disappear on restart, on purpose: persistence is B-011, and keeping it out of this
-  // milestone is what stops the first import feature from also being the first migration.
-  const [games, setGames] = useState<readonly Game[]>([]);
+  // **The library is a database now** (B-011). `games` is hot-field-only `GameSummary[]`,
+  // re-read with `listGames()` — never grown by appending what an import call returned, which
+  // used to carry full `Game` values (pgn and tags included) into React state for every row.
+  // `gameDetails` holds the full `Game` for whichever games have been opened, fetched with
+  // `getGame` on demand — the library table itself never needs `pgn` or `tags`, which is the
+  // other half of the B-033 fix.
+  const [games, setGames] = useState<readonly GameSummary[]>([]);
+  const [gameDetails, setGameDetails] = useState<ReadonlyMap<GameId, Game>>(
+    new Map(),
+  );
 
   const [openGames, setOpenGames] = useState<readonly OpenGame[]>([]);
   const [activeGameId, setActiveGameId] = useState<GameId | null>(null);
@@ -85,14 +93,51 @@ export default function App() {
     };
   }, []);
 
-  const openGame = useCallback((gameId: GameId) => {
-    setOpenGames((current) =>
-      current.some((entry) => entry.gameId === gameId)
-        ? current
-        : [...current, { gameId, ply: 0 }],
-    );
-    setActiveGameId(gameId);
+  /** (Re-)read the library from the database. Called on mount and after every import. */
+  const refreshLibrary = useCallback(async () => {
+    const result = await listGames();
+    if (result.ok) {
+      setGames(result.value);
+    } else {
+      console.error("[library] ipc failed", result.error);
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshLibrary();
+  }, [refreshLibrary]);
+
+  /**
+   * Open a game, fetching its full detail first if this is the first time.
+   *
+   * **Fetches before switching tabs**, rather than switching immediately and showing a loading
+   * state, which keeps `GameView` from needing to know about a game that is not fully loaded
+   * yet — simplicity first, and nothing here needs to feel instantaneous at MVP scale.
+   */
+  const openGame = useCallback(
+    async (gameId: GameId) => {
+      if (!gameDetails.has(gameId)) {
+        const result = await getGame(gameId);
+        if (!result.ok || result.value === null) {
+          console.error("[game] failed to fetch", gameId, result);
+          return;
+        }
+        const game = result.value;
+        setGameDetails((current) => {
+          const next = new Map(current);
+          next.set(gameId, game);
+          return next;
+        });
+      }
+      setOpenGames((current) =>
+        current.some((entry) => entry.gameId === gameId)
+          ? current
+          : [...current, { gameId, ply: 0 }],
+      );
+      setActiveGameId(gameId);
+    },
+    [gameDetails],
+  );
 
   const closeGame = useCallback((gameId: GameId) => {
     setOpenGames((current) => current.filter((entry) => entry.gameId !== gameId));
@@ -172,31 +217,39 @@ export default function App() {
    *
    * Shared by both sources on purpose: the difference between a paste and a batch of files is
    * entirely in how the report was built, and everything after that — the strip, the closing
-   * rule, appending the rows — must not be able to diverge.
+   * rule, re-reading the library — must not be able to diverge.
+   *
+   * **No longer takes the imported games themselves** (B-011): the backend already persisted
+   * them and handed back only ids, so what changed is "re-read the library", not "append these
+   * rows" — same reasoning as `refreshLibrary`.
    */
-  const applyImport = useCallback((report: ImportReport, imported: readonly Game[]) => {
-    // **The strip always gets the outcome**, whichever way the dialog goes. That is what makes
-    // dismissing the dialog safe, and it is the difference between this and the version that
-    // was reported as losing the status.
-    setImportReport(report);
+  const applyImport = useCallback(
+    (report: ImportReport) => {
+      // **The strip always gets the outcome**, whichever way the dialog goes. That is what
+      // makes dismissing the dialog safe, and it is the difference between this and the version
+      // that was reported as losing the status.
+      setImportReport(report);
 
-    if (shouldCloseAfterImport(report)) {
-      setImportOpen(false);
-      // Clearing the inputs is part of closing: reopening on last week's paste, or on a file
-      // list that has already been imported, is how games get imported twice by accident, and
-      // duplicate rows are expected but not free.
-      setImportText("");
-      setImportPaths([]);
-    } else {
-      // Something to read or act on, so the dialog holds — on its result step, not on a box
-      // still full of the text that just failed.
-      setImportStep("result");
-    }
-    // Appended rather than replaced: ids come from one long-lived importer in the backend, so
-    // two imports are two batches of the same library. Duplicate rows are expected and visible
-    // (ADR-0008 rule 6 was deleted); de-duplicating is B-022.
-    setGames((current) => [...current, ...imported]);
-  }, []);
+      if (shouldCloseAfterImport(report)) {
+        setImportOpen(false);
+        // Clearing the inputs is part of closing: reopening on last week's paste, or on a file
+        // list that has already been imported, is how games get imported twice by accident, and
+        // duplicate rows are expected but not free.
+        setImportText("");
+        setImportPaths([]);
+      } else {
+        // Something to read or act on, so the dialog holds — on its result step, not on a box
+        // still full of the text that just failed.
+        setImportStep("result");
+      }
+      // The database is the library now: two imports are two batches of the same table, and
+      // re-reading it is simpler than reasoning about which rows a partial batch added.
+      // Duplicate rows are expected and visible (ADR-0008 rule 6 was deleted); de-duplicating
+      // is B-022.
+      void refreshLibrary();
+    },
+    [refreshLibrary],
+  );
 
   const runImport = useCallback(async () => {
     setImportBusy(true);
@@ -208,27 +261,22 @@ export default function App() {
       const result = await importPgnFiles(importPaths);
       setImportBusy(false);
       if (!result.ok) {
+        // A database failure, not a bad PGN — parsing still cannot fail (ADR-0009), but
+        // persisting now can (B-011). See the note at the top of `src-tauri/src/lib.rs`.
         console.error("[import] ipc failed", result.error);
         return;
       }
-      applyImport(
-        buildFileImportReport(result.value),
-        result.value.flatMap((file) =>
-          file.outcome.kind === "imported" ? file.outcome.summary.games : [],
-        ),
-      );
+      applyImport(buildFileImportReport(result.value));
       return;
     }
 
     const result = await importPgnText(importText);
     setImportBusy(false);
     if (!result.ok) {
-      // A transport failure, not a bad PGN — the command itself cannot fail (ADR-0009).
-      // Outside Tauri this is the expected path, and the browser control that B-077 argues for.
       console.error("[import] ipc failed", result.error);
       return;
     }
-    applyImport(buildImportReport(result.value), result.value.games);
+    applyImport(buildImportReport(result.value));
   }, [applyImport, importPaths, importSource, importText]);
 
   const setPly = useCallback((gameId: GameId, ply: number) => {
@@ -261,15 +309,17 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [activeGameId, closeGame]);
 
-  const byId = (id: GameId) => games.find((game) => game.id === id) ?? null;
-
+  // Tab labels and the active board both read `gameDetails`, not `games` (the library
+  // summaries): `openGame` fetches into `gameDetails` before a game is ever added to
+  // `openGames`, so every open tab is guaranteed to have an entry there.
   const tabs: readonly OpenTab[] = openGames.flatMap((entry) => {
-    const game = byId(entry.gameId);
-    if (game === null) return [];
+    const game = gameDetails.get(entry.gameId);
+    if (game === undefined) return [];
     return [{ gameId: entry.gameId, label: `${game.white.name}–${game.black.name}` }];
   });
 
-  const active = activeGameId === null ? null : byId(activeGameId);
+  const active =
+    activeGameId === null ? null : (gameDetails.get(activeGameId) ?? null);
   const activeEntry = openGames.find((entry) => entry.gameId === activeGameId) ?? null;
 
   return (
@@ -330,7 +380,7 @@ export default function App() {
             : () => {
                 const id = importReport.singleGameId;
                 if (id === null) return;
-                openGame(id);
+                void openGame(id);
                 setImportOpen(false);
                 setImportText("");
                 setImportPaths([]);

@@ -32,7 +32,7 @@ import type {
   FileImport,
   ImportEncoding,
   ImportFailure,
-  ImportSummary,
+  TextImportResult,
 } from "@/shell/ipc";
 import type { GameId } from "@/model/game";
 
@@ -148,10 +148,10 @@ function toReportFailure(failure: ImportFailure): ImportReportFailure {
  * that *can* (see B-116, resynchronisation) degrades to showing the earliest problem instead
  * of crashing here.
  */
-export function buildImportReport(summary: ImportSummary): ImportReport {
-  const imported = summary.games.length;
-  const first = summary.errors[0];
-  const only = imported === 1 ? (summary.games[0]?.id ?? null) : null;
+export function buildImportReport(result: TextImportResult): ImportReport {
+  const imported = result.imported.length;
+  const first = result.errors[0];
+  const only = imported === 1 ? (result.imported[0] ?? null) : null;
 
   if (first === undefined) {
     return {
@@ -197,11 +197,11 @@ export function buildFileImportReport(
         encoding: null,
       };
     }
-    const { summary, encoding } = result.outcome;
-    const first = summary.errors[0];
+    const { imported, errors, encoding } = result.outcome;
+    const first = errors[0];
     return {
       name: result.name,
-      imported: summary.games.length,
+      imported: imported.length,
       failure: first === undefined ? null : toReportFailure(first),
       unreadableKey: null,
       encoding,
@@ -218,8 +218,8 @@ export function buildFileImportReport(
   const singleGameId =
     imported === 1 && filesFailed === 0
       ? (results.flatMap((result) =>
-          result.outcome.kind === "imported" ? result.outcome.summary.games : [],
-        )[0]?.id ?? null)
+          result.outcome.kind === "imported" ? result.outcome.imported : [],
+        )[0] ?? null)
       : null;
 
   const summaryKey: ImportSummaryKey =

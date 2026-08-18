@@ -1,8 +1,9 @@
 //! chessgui — Tauri shell.
 //!
-//! M1 is a skeleton: this process opens a window and serves the frontend. B-007 milestone 2
-//! added the first real logic, in [`import`] — a pure module with no IO and no Tauri, which
-//! is what lets it be tested without a window.
+//! M1 is a skeleton: this process opens a window and serves the frontend. B-007 added the
+//! import logic in [`import`] and [`files`] — pure/IO-only modules with no Tauri, which is what
+//! lets them be tested without a window. B-011 adds [`db`], the same split: real IO (a SQLite
+//! file), no Tauri, compiled and tested before handover.
 //!
 //! Two rules that hold from here on:
 //!
@@ -10,13 +11,28 @@
 //!    every user-facing word. See `AppError`.
 //! 2. **Everything the frontend calls goes through `src/shell/ipc.ts`** on the other side,
 //!    which is what keeps ADR-0001 reversible.
+//!
+//! # B-011 changed one of those rules, and it is worth being explicit about which
+//!
+//! Milestones 3–4 of B-007 documented `import_pgn_text` / `import_pgn_files` as **returning no
+//! `Result`**, on the grounds that a refused game is data (ADR-0009), not a command failure. That
+//! reasoning is unchanged for *parsing*. It never covered *persistence* — writing the parsed
+//! games to disk is a new failure class (a full disk, a permissions problem, a poisoned
+//! migration) that has nothing to do with what the PGN said, and there is no honest way to
+//! report "the database write failed" as import data. So both commands now return
+//! `Result<_, AppError>`: `Ok` still carries every parse-time refusal as data exactly as before,
+//! and `Err` is reserved for the database itself being unable to accept the write.
 
+pub mod db;
 pub mod files;
 pub mod import;
 
 use std::sync::{Mutex, PoisonError};
 
 use serde::Serialize;
+use tauri::Manager;
+
+use import::{GameId, ImportError};
 
 /// Machine-readable error returned to the frontend.
 ///
@@ -36,13 +52,20 @@ impl AppError {
         Self { code, detail: None }
     }
 
-    #[allow(dead_code)]
     pub fn with_detail(code: &'static str, detail: impl Into<String>) -> Self {
         Self {
             code,
             detail: Some(detail.into()),
         }
     }
+}
+
+/// A `rusqlite::Error` is never shown to the user as-is (B-072) — this just gets it behind the
+/// same `AppError` shape as everything else. `code` is one value for now because the frontend
+/// has no different action to offer for "disk full" versus "migration failed"; split it if that
+/// stops being true.
+fn db_error(error: rusqlite::Error) -> AppError {
+    AppError::with_detail("db_error", error.to_string())
 }
 
 /// Build and version information for the About screen.
@@ -65,48 +88,75 @@ fn app_info() -> AppInfo {
     }
 }
 
-/// The importer, held for the life of the process (B-007 milestone 3).
+/// The open database connection, held for the life of the process.
 ///
-/// **Stateful on purpose, and this is the only reason it lives here rather than being created
-/// per call:** `Importer` hands out game and player ids, so pasting twice must not reissue the
-/// same id, and the same player appearing in two pastes should be one player. Games are held by
-/// the frontend for now; B-011 replaces both the storage and this identity scheme.
-#[derive(Default)]
-struct ImportState(Mutex<import::Importer>);
+/// **The in-memory `Importer` no longer lives in Tauri state.** Through milestone 4 it did,
+/// because it handed out per-process ids and pasting twice had to not reissue one. B-011 retires
+/// that: the database assigns every `GameId`/`PlayerId` on insert, so a fresh `Importer::new()`
+/// per call is exactly as correct and there is no identity left to hold onto between calls.
+struct DbState(Mutex<rusqlite::Connection>);
 
-/// Import pasted PGN text.
+/// What one `import_pgn_text` call persisted.
 ///
-/// **Returns no `Result`, and that is the policy rather than an oversight.** Under ADR-0009 a
-/// refused game is *data* — an entry in `errors` — not a failed command, and there is no input
-/// for which the importer has nothing to say: bytes that are only PGN by extension produce one
-/// empty junk row. So the command cannot fail, and the frontend has no error branch to write for
-/// it beyond the transport failures `ipc.ts` already models.
-#[tauri::command]
-fn import_pgn_text(text: String, state: tauri::State<'_, ImportState>) -> import::ImportSummary {
-    // A poisoned lock is recovered from rather than reported. The guarded state is two
-    // counters and a name map: a panic mid-import can cost at most a skipped id, which is
-    // invisible, and there is no user-facing failure worth inventing a code for. If this ever
-    // guards something with an invariant, that reasoning expires.
-    let mut importer = state.0.lock().unwrap_or_else(PoisonError::into_inner);
-    importer.import_text(&text)
+/// **No full `Game` values cross this boundary** — that is B-011 fixing the B-033 finding: the
+/// payload used to be 1.5x the source file because every row carried its own verbatim PGN over
+/// IPC, and the library table never read it. `imported` is just the new, stable ids; the
+/// frontend re-reads the library via `list_games` and fetches one game via `get_game`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextImportResult {
+    pub imported: Vec<GameId>,
+    pub errors: Vec<ImportError>,
 }
 
-/// Import one or more PGN files.
+/// Import pasted PGN text and persist whatever parsed.
+///
+/// See the module header for why this now returns a `Result`: parsing still cannot fail in the
+/// ADR-0009 sense (a refused game is `errors`, still data), but the database write can, and that
+/// failure has no honest place inside `TextImportResult`.
+#[tauri::command]
+fn import_pgn_text(
+    text: String,
+    db: tauri::State<'_, DbState>,
+) -> Result<TextImportResult, AppError> {
+    let summary = import::Importer::new().import_text(&text);
+    let mut conn = db.0.lock().unwrap_or_else(PoisonError::into_inner);
+    let imported = db::insert_import(&mut conn, &summary.games).map_err(db_error)?;
+    Ok(TextImportResult {
+        imported,
+        errors: summary.errors,
+    })
+}
+
+/// Import one or more PGN files and persist whatever parsed.
 ///
 /// A thin wrapper, deliberately: everything it does is in [`files::import_files`], which knows
 /// nothing about Tauri and is therefore compiled and tested before handover. What is *not*
 /// verifiable here is this signature and the handler registration below — as always.
-///
-/// Like [`import_pgn_text`] it returns no `Result`: an unreadable file is data in that file's
-/// outcome, not a failed command. **Unlike it, this can report several failures** — see the
-/// note in [`files`].
 #[tauri::command]
 fn import_pgn_files(
     paths: Vec<String>,
-    state: tauri::State<'_, ImportState>,
-) -> Vec<files::FileImport> {
-    let mut importer = state.0.lock().unwrap_or_else(PoisonError::into_inner);
-    files::import_files(&mut importer, &paths)
+    db: tauri::State<'_, DbState>,
+) -> Result<Vec<files::FileImport>, AppError> {
+    let mut importer = import::Importer::new();
+    let mut conn = db.0.lock().unwrap_or_else(PoisonError::into_inner);
+    files::import_files(&mut importer, &mut conn, &paths).map_err(db_error)
+}
+
+/// Every game in the database, hot fields only. **Never carries `tags` or `pgn`** — see
+/// [`db::GameSummary`].
+#[tauri::command]
+fn list_games(db: tauri::State<'_, DbState>) -> Result<Vec<db::GameSummary>, AppError> {
+    let conn = db.0.lock().unwrap_or_else(PoisonError::into_inner);
+    db::list_games(&conn).map_err(db_error)
+}
+
+/// One game in full, including `tags` and the verbatim `pgn` — fetched only when the user opens
+/// it, which is the other half of the B-033 fix. `None` if `id` does not exist.
+#[tauri::command]
+fn get_game(id: GameId, db: tauri::State<'_, DbState>) -> Result<Option<import::Game>, AppError> {
+    let conn = db.0.lock().unwrap_or_else(PoisonError::into_inner);
+    db::get_game(&conn, id).map_err(db_error)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -118,11 +168,27 @@ pub fn run() {
         // opens in the user's browser instead of navigating the app window away from the app.
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(ImportState::default())
+        .setup(|app| {
+            // The database is a derived artifact (ADR-0004 addendum, session 9): it lives in the
+            // app's own data directory, not beside the user's PGN files, and it is fine for this
+            // to be a hard failure at startup — there is no reduced-functionality mode for "no
+            // database", and a silent one would be worse than a crash a user can report.
+            let dir = app
+                .path()
+                .app_data_dir()
+                .expect("app data dir is resolvable on every supported platform");
+            std::fs::create_dir_all(&dir).expect("create the app data directory");
+            let conn =
+                db::open(&dir.join("chessgui.sqlite3")).expect("open and migrate the database");
+            app.manage(DbState(Mutex::new(conn)));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             app_info,
             import_pgn_text,
-            import_pgn_files
+            import_pgn_files,
+            list_games,
+            get_game
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
