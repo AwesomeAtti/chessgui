@@ -1,7 +1,7 @@
 # Feature Spec: Local persistence (SQLite)
 
 - **Backlog ID:** B-011
-- **Status:** in-progress (session 9) — M1–M3 built and committed (`297f3e0`, `f03b584`, `3e47802`), not pushed; M2 needs `cargo build` on the owner's machine, M4 is owner verification. See `docs/handover.md`'s "Session 9" section.
+- **Status:** done (session 9) — M1–M4 complete. Committed (`297f3e0`, `f03b584`, `3e47802`, `1def042`) and pushed to `origin/main`. `cargo build`, full check chain, and owner app-restart verification all pass on the owner's machine. See `docs/handover.md`'s "Session 9" section.
 - **Owner:** Brian
 
 ## Goal
@@ -86,18 +86,17 @@ the derivability *property* to hold, only for it to be convenient, which can wai
 
 ## Acceptance criteria
 
-- [ ] Games and players persist across an app restart — **not yet run; owner-verified, since it
-      needs a window (M4).**
+- [x] Games and players persist across an app restart — owner-verified on real hardware
+      (M4): imported games, quit, relaunched, games were still in the library.
 - [x] `list_games` never carries `pgn` or `tags_json` over IPC; `get_game` does. Enforced by
       `GameSummary` having no such fields at all (`db::tests::list_games_never_carries_tags_or_pgn`).
 - [x] The Rust db-layer tests mirror the existing `Importer` tests: ids unique across imports, the
       same player (by normalised name) reuses one row — including two *new* players sharing a
       name within one import batch — a nameless player is never pooled, re-importing duplicates
       rows on purpose. 10 tests in `db.rs`.
-- [x] `cargo test`, `cargo clippy --all-targets -D warnings`, `cargo fmt --check` clean in the
-      mirror crate (per `rust_verification.md`) — 48 tests (`db`, `files`, `import` combined).
-      **Not yet re-verified on the owner's machine including the Tauri crate itself** — `lib.rs`
-      cannot be compiled in the sandbox, as always; this is M2's open item.
+- [x] `cargo test`, `cargo clippy --all-targets -D warnings` clean, both in the mirror crate
+      (per `rust_verification.md`, 48 tests) and re-verified on the owner's machine against the
+      real Tauri crate itself (`cargo build`/`cargo test`/`cargo clippy` all green, 48 tests).
 - [x] `npm run typecheck && npm test && npm run check:i18n && npm run build` clean — verified
       against the real toolchain in this session's sandbox (86 tests, before and after the change).
 - [x] Rendered and screenshotted headless (per `visual_verification.md`) — empty database and
