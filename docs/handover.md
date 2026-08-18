@@ -13,14 +13,24 @@ wrote the rule.
 **Head at session start:** `68bf46e`, clean, level with `origin/main`. Session 6 landed in five
 increments — `28e5240` · `91ff8ae` · `5a04622` · `0771386` · `68bf46e`.
 
-**Session 7's work is in the working tree and NOT committed at the time of writing**, because the AI
-cannot run git writes. **Rewrite this paragraph from `git log` after pushing** — that is the procedure
-below, and session 6 proved it costs one extra commit and is worth it. Files touched:
-`src-tauri/src/lib.rs`; `src/App.tsx`; `src/shell/ipc.ts`; `src/features/library/` (`ImportDialog`,
-`ImportOutcome`, `ImportStrip`, `importReport` + test, `LibraryView`); `src/features/game/`
-(`GameInfo`, `infoFields` + test); `src/i18n/locales/en.ts`; `src/i18n/catalogue.test.ts`;
-`src/styles.css`; `src/mock/games.ts` **deleted**; `docs/ui-survey.md`;
-`docs/feature-specs/b007-pgn-import.md`; `docs/backlog.md`; this file.
+**Session 7 is committed and pushed in six increments** — `847b29d` the import survey and spec ·
+`0d5b636` the Rust command and IPC · `4e1a7aa` the info panel · `46ad878` backlog and handover ·
+`259820a` the import UI · `d2a482c` the README. `git log origin/main..HEAD` is empty and the tree is
+clean, read after the push.
+
+**Note the order: the "close session 7" commit is fourth, not last**, and the reason is a mistake
+worth keeping. The commit split was written as a list of `git add` lines, one of which named
+`src/mock` — a path `git rm` had already staged as deleted, so it no longer existed. **`git add` on a
+missing path aborts that command, and the `git commit` on the next line then commits whatever
+happens to be staged — which was nothing.** The entire import-UI commit was skipped in silence, the
+already-staged deletion was swept into an unrelated commit, and four commits were pushed in which
+`App.tsx` imported a file that had just been deleted. **Every one of those four fails `typecheck`;
+only the fifth is green.** Not rewritten, because the repository is public and the history is out.
+
+**The rule that falls out, and it generalises past git:** a multi-step script whose steps are not
+`&&`-chained keeps going after a step fails, and the failure scrolls past. Either chain them, or
+check `git status` between commits. This is the same species as B-106's "green means nothing" —
+a command that reports success while doing nothing at all.
 
 **Written last, deliberately.** That is the rule this file keeps breaking, so here it is as a
 procedure rather than an intention: **write the header after the final push, from `git log`, not from
@@ -102,8 +112,8 @@ repository. Risk 5 is downgraded but not closed — see the risk register.
 
 ## Active work
 
-**Nothing is in progress and nothing is half-built. B-007 milestones 1–3 are done; milestone 4 is the
-next thing to start.** Session 7 is uncommitted — run the checks in "Next actions" and commit.
+**Nothing is in progress and nothing is half-built. B-007 milestones 1–3 are done, committed and
+pushed; milestone 4 is the next thing to start.**
 
 Verified: `npm run typecheck`, `npm test` (71), `npm run check:i18n`, `vite build` in the AI's
 container, and **the owner ran the app and used the feature**, which is the verification that matters
@@ -745,6 +755,12 @@ Session 7:
   caught its own author in a mockup, and **B-097 shrank again**: the error list is of length zero or
   one, and what it must add is the sentence saying everything after the failure was never read.
 - **`src/mock/games.ts` deleted.** The library holds imported games now.
+- **`README.md` brought up to date**, four sessions after it stopped being true: it still said
+  "pre-implementation… no code yet… the technology stack is deliberately undecided", and *Running it*
+  said there was nothing to run. Now carries a **Project documents** table, the real commands, the
+  Node 22 / Rust 1.95 floor, the actual source layout, ADR-0009 as the live import policy, and
+  ADR-0008 marked superseded rather than proposed. Every link in it was checked to resolve — it is a
+  public repo, and a dead link is the first thing a visitor hits.
 
 Session 6:
 
@@ -1172,7 +1188,7 @@ Session 1:
 
 **Nothing is blocked and nothing is half-built — but session 7 is uncommitted.** Do this first:
 
-0. **Verify and commit session 7.** `npm run typecheck && npm test && npm run check:i18n` and
+0. ~~**Verify and commit session 7.**~~ Done — see the header. Kept for the split that was used: `npm run typecheck && npm test && npm run check:i18n` and
    `cargo test --manifest-path src-tauri/Cargo.toml`. The frontend was verified in the AI's container
    and the feature was exercised in the running app by the owner; **the Rust half — one command and a
    state struct in `lib.rs` — has only been compiled on the owner's machine**, as always.
