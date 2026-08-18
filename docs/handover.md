@@ -5,33 +5,30 @@
 
 **Last updated:** 2026-08-18 · **Updated by:** AI (Stage 3 / session 8) · **Kit version:** 0.2.0
 
-**Session 8 is written to disk and NOT committed.** Head at session start was `f36e6b4`, clean and
-level with `origin/main`. Commit it, push it, then **rewrite this paragraph from `git log`** — that
-is the standing rule and it is the reason this sentence is phrased as a task rather than a claim.
+**Session 8 is committed and pushed in five increments**, written from `git log` after the push
+rather than from memory — `fa8a14c` the survey and the spec · `83edb12` the Rust file reader and the
+capabilities file · `c4a8c44` the `src/shell/` boundary and the two plugins · `422f0df` the import UI
+and the report shape · `2795128` the docs. Head at session start was `f36e6b4`.
+`git log origin/main..HEAD` is empty and the tree is clean, both read after the push.
 
-Suggested split — five commits, keeping the reasoning separate from the code as session 7's did:
+**Six, counting the commit that carries this paragraph — and that one is structurally unnameable.**
+Three consecutive handovers before session 7 undercounted their own sessions because the header was
+written first and went stale; session 7 fixed the method and its header still said six when there
+were seven, because the seventh *was* the header rewrite. A commit cannot contain its own hash. So
+the honest form is the one above: **name the content commits, then say the header commit exists.**
+That closes the loop rather than pretending it does not.
 
-1. **the reasoning** — `docs/ui-survey.md` + `docs/feature-specs/b007-pgn-import.md`
-2. **the backend** — `src-tauri/src/files.rs`, `src-tauri/src/lib.rs`, `Cargo.toml`, `Cargo.lock`,
-   `capabilities/default.json`
-3. **the shell boundary** — `src/shell/{files,opener,ipc}.ts`, `package.json`,
-   `package-lock.json`, `scripts/check-no-literals.mjs`
-4. **the feature** — `importReport.ts` + its test, `ImportDialog`, `ImportOutcome`, `LibraryView`,
-   `App`, `GameInfo`, `en.ts`, `catalogue.test.ts`, `styles.css`
-5. **the record** — `docs/handover.md`, `docs/backlog.md`, `docs/tech-stack.md`
+**The rule that produced this, kept because the file keeps needing it:** write the header as the
+literal last action, from `git log`, after the push.
 
-**Step 4 is deliberately large and should not be split further.** It changes `ImportReport`'s shape
-and every consumer of it in the same breath; separating them produces an intermediate commit whose
-frontend cannot typecheck, which is precisely what session 7 shipped four of. Steps 1–3 change no
-behaviour on their own.
-
-**Verified: the final state.** Each intermediate commit is ordered so it *should* be self-consistent,
-but they have not been checked one at a time — say so rather than implying otherwise.
+**Verification before the commits, run on the owner's machine, not claimed from the container:**
+`typecheck`, `npm test` (86), `check:i18n`, `vite build`, `cargo test` (**41** — four more than the
+container's mirror, which has no `pgn_reader_probe`), and `cargo clippy --all-targets -D warnings`
+clean. `git status --short` after the chain printed nothing, which is the check session 7 skipped.
 
 **`git add` on a missing path aborts the command, and the `git commit` on the next line then commits
 whatever happens to be staged — which may be nothing.** That is how session 7 pushed four commits
-that fail `typecheck`. **Chain every step with `&&`**, or check `git status` between commits. Nothing
-was deleted this session, so the specific trap is absent, but the general one is not.
+that fail `typecheck`. Chain every step with `&&`, as session 8 did.
 
 **Session 7's header, kept for the record:**
 
@@ -1390,15 +1387,12 @@ Session 1:
 
 ## Next actions
 
-**Nothing is blocked and nothing is half-built — but session 8 is uncommitted.** Commit it first;
-the split is in the header.
+**Nothing is blocked, nothing is half-built, and session 8 is committed and pushed.**
 
-**Run `npm install` before anything else.** Two frontend packages were added
-(`@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-opener`) and `package.json`/`package-lock.json`
-carry them, but your `node_modules` does not. **Checked on your machine rather than assumed:**
-`npx tsc --noEmit` currently reports exactly two errors, both "cannot find module", and both go away
-with the install. The Rust side needs no equivalent step — `cargo` fetches the two new crates on the
-next build, and `Cargo.lock` already pins them.
+**`npm install` after pulling.** Two frontend packages arrived this session
+(`@tauri-apps/plugin-dialog`, `@tauri-apps/plugin-opener`); without the install, `tsc` reports
+exactly two "cannot find module" errors and nothing else. The Rust side needs no equivalent step —
+`cargo` fetches the two new crates on the next build and `Cargo.lock` already pins them.
 
 The full check afterwards is `npm run typecheck && npm test && npm run check:i18n && npm run build`
 then `cargo test --manifest-path src-tauri/Cargo.toml`, and `cargo clippy --all-targets -- -D
