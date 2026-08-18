@@ -1,8 +1,10 @@
 # ADR-0009: PGN import is strict — the libraries decide, and we add no validation
 
-- **Status:** accepted
-- **Date:** 2026-08-17
-- **Deciders:** Owner (session 5)
+- **Status:** accepted — **with a session-6 addendum before the Rationale**, which narrows how rule 1
+  should be read: an import error turns out to be terminal, so a file *is* the unit of failure for
+  everything after the bad game. Measured, not argued.
+- **Date:** 2026-08-17 (addendum 2026-08-18)
+- **Deciders:** Owner (session 5); addendum owner-decided (session 6)
 - **Supersedes:** **ADR-0008 rules 1, 2, 3, 4, 5 and 7.** Rule 6 was already removed by ADR-0008's
   own session-5 addendum. Rule 3b survives in amended form and is restated here.
 - **Backlog link:** B-114. Governs B-007; simplifies B-011, B-097, B-098, B-100
@@ -151,7 +153,8 @@ else below is tolerated by both libraries without complaint.
 | **Unterminated tag quote** | Recovers: **one** game, seven correct tags | Splits into **two** games, the first with none of the real tags | Same bytes, different game count. Consequence: a game's index in a file is not a stable identifier for an error message |
 | **Missing roster tags** | Reports the 2 tags that exist | Fabricates 7 defaults (`?`, `*`) | **This one is retired rather than accepted:** the importer sees the truth for free, so nothing is hidden on the side that stores data |
 | **Duplicate tags** | Hands back all 9 in file order | Collapses to 7, keeping the first | Not a validation question — **the importer must choose**, which is a decision. First-one-wins, to stay consistent with the display |
-| **`Result` vs termination marker** | Both available (`tag()` and `outcome()`) — which it prefers is **still unmeasured** | Marker overwrites the tag: reports `0-1` for a file tagged `1-0` | Measure at milestone 2 and prefer the tag; a wrong derived `result` is a re-import |
+| **`Result` vs termination marker** | **Measured at milestone 2: reports both and reconciles neither.** `tag()` gives `1-0` and `outcome()` gives `0-1` for the same game | Marker overwrites the tag: reports `0-1` for a file tagged `1-0` | **The tag wins**, because ADR-0005 derives every hot field from tags; the marker is the fallback for a file with no `Result` tag at all. So the library table and a chessops-derived view disagree about this one game. Accepted: making them agree means one side second-guessing the other, and a wrong derived `result` is a re-import |
+| **Unterminated tag *mid-file*** | **Not an error at all — it silently merges two games into one**, tags and moves together. It only becomes an error at end of input | n/a | Measured at milestone 2 and worse than a refusal, because nothing reports it. Catching it means us counting tags or re-splitting the file, which is a parser of our own |
 | **Bytes that are not PGN** | One game, **zero tags, zero tokens** | One game with 7 fabricated headers | An empty row either way. Rejecting it means a rule of ours; the Rust row is at least visibly empty |
 | **No movetext at all** | Imports as a row with no moves | Same | Also not obviously wrong: a scheduled-but-unplayed game looks exactly like this |
 | **`[Variant "Fischerandom"]` without `FEN`** | Imports; builds no position, so has no opinion | Flattens to standard chess and derives a legal, wrong mainline | Catching it means maintaining our own list of variant names |
@@ -170,6 +173,41 @@ for different callers, and the corpus is what makes the differences visible inst
 If any of these turns out to matter in practice, the fix is **one targeted check with a fixture and a
 recorded reason** — not a general validation layer, and not a rule added quietly because it seemed
 obviously right at the time.
+
+## Addendum, session 6 — **an import error is terminal, and rule 1 has to be read more narrowly**
+
+Rule 1 says "one game imports or one game errors; **a file is never the unit of failure**". B-007
+milestone 2 measured what that means in practice, and the second half is only half true.
+
+**`pgn-reader`'s entire error vocabulary is two messages** — `unterminated tag` and
+`unterminated comment`, both `io::ErrorKind::InvalidData`. That is not inferred from behaviour; it is
+read from the crate's own source (`reader.rs`), which is a closed set we can rely on until the crate
+changes (B-063). Everything else is an IO error from the underlying reader, which an in-memory string
+cannot produce.
+
+**Both are irrecoverable, and the crate says so.** Measured on a `clean · unterminated-comment · clean`
+input: the unclosed `{` swallows the third game into the comment, the error's byte span runs to the end
+of the input, and `has_more()` returns false. So **there is at most one error per input, and every game
+after it is lost.**
+
+That falsifies B-007's acceptance criterion "a file of 3,000 games containing 4 the parser refuses
+imports 2,996 rows and reports 4 errors". It is not reachable, and the spec has been corrected rather
+than the code bent to meet it.
+
+**We do not resynchronise, and the reasoning is the same shape as the rest of this ADR.** Scanning
+forward for the next `[Event ` after a failure would recover the remaining games, and every recovered
+game would still be parsed in full by `pgn-reader` — so it would not weaken rule 3. What it would add
+is a piece of our own logic deciding where a game begins, permanently, for an event **nobody has
+counted**. B-101's un-run half is that count. Meanwhile the importer fails loudly: the error carries a
+stable code, the byte offset past which nothing could be read, and the failing game's `White`, `Black`
+and `Date` — measured to survive, because the tag section is parsed before the movetext fails. The user
+still has the file, which is this ADR's whole safety argument.
+
+**The asymmetry that decided it:** adding recovery later is fifteen lines and a fixture; removing it
+once shipped is not. The behaviour is pinned by a test, so whoever changes their mind has to say so.
+
+**Read rule 1 as: a file is never the unit of failure *for the games the parser reached*.** That is
+weaker than it first sounded, and it is what the library actually offers.
 
 ## Rationale
 

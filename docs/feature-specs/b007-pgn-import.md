@@ -1,7 +1,7 @@
 # Feature Spec: B-007 — PGN import
 
 - **Backlog ID:** B-007
-- **Status:** **milestone 1 done** (session 5); milestones 2–4 awaiting approval to start
+- **Status:** **milestones 1 and 2 done** (sessions 5 and 6); milestone 3 is next
 - **Owner:** Project owner
 - **Size tier:** **Large**, though smaller with each revision. One new Rust crate and the first IPC
   call carrying real data.
@@ -84,15 +84,33 @@ an error does occur it carries
 2019.04.02: unterminated comment" is better than either — note that the example cannot be about an
 illegal move any more, because the importer does not look.
 
+**Measured at milestone 2, and it makes the report simpler and worse at the same time.** The byte
+offset is always available, because the reader's own `stream_position` gives it. The header text is
+usually available, because the tag section is parsed before the movetext fails — all seven roster tags
+arrive before an unterminated comment is noticed. And there is **at most one error**, so B-097's
+"list the errors" is a list of length zero or one. The part that is worse: the report must also say
+that everything after that offset was never read, which is a sentence no import report wants to
+contain.
+
 ## Acceptance criteria
 
-- [ ] Pasting a multi-game PGN produces one row per game, with players, event, date, round, result,
-      ECO and ply count derived from the tags.
-- [ ] A file of 3,000 games containing 4 the parser refuses imports 2,996 rows and reports 4 errors,
-      each identifying its game. **No error causes the other games to be lost.**
-- [ ] `cargo test` asserts the milestone-1 measurements from the Rust side —
-      `importOutcome`/`importTags`/`importTokens` in `expected.json` — which is what turns that
-      manifest from a record into a guard.
+- [x] Pasting a multi-game PGN produces one row per game, with players, event, date, round, result,
+      ECO and ply count derived from the tags. *(Milestone 2; the paste target itself is milestone 3.)*
+- [x] ~~A file of 3,000 games containing 4 the parser refuses imports 2,996 rows and reports 4 errors,
+      each identifying its game. **No error causes the other games to be lost.**~~
+      **Falsified by measurement at milestone 2, and replaced.** `pgn-reader`'s errors are
+      irrecoverable: an unterminated `{` swallows the rest of the input into the comment and
+      `has_more()` goes false, so **there is at most one error per input and the games after it are
+      lost.** The corrected criterion: *a file whose 13th game is malformed imports the first 12,
+      reports one error naming that game and the byte offset past which nothing could be read, and
+      does not pretend the rest was read.* See ADR-0009's session-6 addendum for why we do not
+      resynchronise, and `tests/import_corpus.rs` for the test that pins it.
+- [x] `cargo test` asserts the milestone-1 measurements from the Rust side —
+      `importOutcome`/`importErrorCode`/`importTokens` in `expected.json`, plus `importedTags`, added
+      at milestone 2 — which is what turns that manifest from a record into a guard.
+      **`importedTags` is not a duplicate of `importTags`:** the parser reports every tag pair
+      including repeats, the importer keeps the first of each, and the two differ on exactly one
+      fixture. Recording both keeps the library's truth and our decision separate.
 - [ ] A legal Antichess or Crazyhouse game imports normally — trivially, since the importer never
       consults the rules.
 - [ ] Variant handling is **not** an import concern: `[Variant "Grand Chess"]` and
@@ -173,12 +191,32 @@ count, ply count, the first token it refuses, and whether it alters a token inst
 chessops observations already in `expected.json`. **This milestone can fail usefully**: a
 disagreement is the B-064 divergence risk finally producing a result instead of a paragraph.
 
-**Milestone 2 — the pure import module.**
-`src-tauri/src/import/`: text in, games plus errors out. Hot fields per ADR-0005, `result` as an
-integer, `PgnDate` raw plus parsed, full tag map retained, verbatim PGN byte-preserved, `plyCount`
-from a token count. UTF-8 with Latin-1 fallback. **No legality walk and no positions** — that is the
-point of milestone 1 having measured what `pgn-reader` alone refuses.
-→ `cargo test` asserting, for all eighteen fixtures, whatever milestone 1 established.
+**Milestone 2 — the pure import module. DONE (session 6).**
+Delivered as `src-tauri/src/import/` — `mod.rs` (the `Importer`), `model.rs` (ADR-0005 in Rust),
+`decode.rs`, `derive.rs`, `visitor.rs` — plus `src-tauri/tests/import_corpus.rs`. 32 Rust tests,
+`cargo fmt` and `cargo clippy --all-targets -D warnings` clean.
+
+**Four things were measured rather than assumed, and three of them changed something:**
+
+1. **`Result` tag vs termination marker.** `pgn-reader` reports both and reconciles neither — tag
+   `1-0`, marker `0-1`, same game. The spec's guidance ("prefer the tag, and prefer agreeing with
+   chessops") is not satisfiable on that file, because chessops prefers the marker. **The tag wins**,
+   since ADR-0005 derives hot fields from tags; the marker is the fallback when there is no tag.
+2. **The error vocabulary is two messages**, read from the crate source rather than guessed, so the
+   error codes are a closed set with one fallback for the version that grows a third (B-063).
+3. **Errors are terminal** — see ADR-0009's session-6 addendum and the falsified acceptance criterion
+   above. This is the finding of the milestone.
+4. **The MSRV claim was already false** (B-094): `pgn-reader` declares `rust-version = "1.88"` and the
+   `shakmaty` it pulls in declares `1.95`, against our `1.77.2`. Corrected to `1.95`, which is what CI
+   has pinned all along.
+
+**And one bug, caught by a test rather than by review:** accent-stripping by Unicode decomposition
+also decomposes Cyrillic `й` into `и` plus a combining breve, so a blanket strip rewrote `Анатолий` as
+`анатолии` — a different name, which would have matched a different player. A combining mark is now
+dropped only when it sits on a Latin letter. **The plausible rule was wrong in a way no amount of
+reading it would have shown**, which is the same shape as the other seven on this project's list.
+
+→ `cargo test --manifest-path src-tauri/Cargo.toml`
 
 **Milestone 3 — IPC and the paste path.**
 `import_pgn_text`; `ipc.ts` gains the call and the result types; a paste target; `LibraryView` reads

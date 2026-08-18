@@ -12,21 +12,32 @@ directory fails loudly instead of quietly going unread:
 
 ## `pgn/expected.json`
 
-| Field | Meaning |
-|---|---|
-| `file` | Filename within `fixtures/pgn/` |
-| `rule` | The ADR-0009 rule this fixture illustrates |
-| `plies` | **Measured:** how many plies the frontend reader derives |
-| `truncatedAtPly` | **Measured:** where derivation stopped, or `null` if it read to the end of what it could see |
-| `note` | What this fixture demonstrates — the most valuable column |
+| Field | Side | Meaning |
+|---|---|---|
+| `file` | — | Filename within `fixtures/pgn/` |
+| `rule` | — | The ADR-0009 rule this fixture illustrates |
+| `importOutcome` | Rust | **Measured:** `imports` or `refused`. One of eighteen is refused |
+| `importErrorCode` | Rust | **Measured:** the stable code for a refusal, or `null` |
+| `importTags` | Rust | **Measured:** tag pairs `pgn-reader` handed back, repeats included |
+| `importedTags` | Rust | **Measured:** tags the importer keeps after first-one-wins. Differs from `importTags` on exactly one fixture, and that difference *is* the duplicate-tag decision |
+| `importTokens` | Rust | **Measured:** movetext tokens the parser handed back, which becomes `plyCount` |
+| `plies` | TypeScript | **Measured:** how many plies the frontend reader derives |
+| `truncatedAtPly` | TypeScript | **Measured:** where derivation stopped, or `null` if it read to the end of what it could see |
+| `note` | — | What this fixture demonstrates — the most valuable column |
 
-**Every field is measured, and there are deliberately no import expectations.** Earlier versions
-carried `disposition`/`warnings`, then `outcome`/`errorCode`, describing what the importer should do.
-They were written from theory, were wrong twice as the policy changed, and are gone. Under ADR-0009
-the MVP importer adds no validation, so an import error is exactly a game `pgn-reader` refuses — and
-nobody has measured which those are. **B-007 milestone 1 measures it**
-(`src-tauri/tests/pgn_reader_probe.rs`), and the fields come back with real values or do not come back
-at all.
+**Every field is measured.** Two earlier versions carried *predicted* importer behaviour —
+`disposition`/`warnings`, then `outcome`/`errorCode` — describing what the importer *should* do. Both
+were written from theory and both were wrong as the policy moved, so the columns were removed and left
+empty until something could fill them. **B-007 milestone 1 filled the import columns**
+(`src-tauri/tests/pgn_reader_probe.rs`) and **milestone 2 turned them into assertions**
+(`src-tauri/tests/import_corpus.rs`). The rule that came out of it: *if a field cannot be filled from a
+measurement, leave it out until it can.* An empty column is honest; a guessed one gets asserted against
+and then defended.
+
+**Two suites read this file and they assert different columns**, which is the point of one shared
+corpus: the Rust suite owns the `import*` fields because `pgn-reader` produces them, and the
+TypeScript suite owns `plies`/`truncatedAtPly` because `chessops` does. Where the two disagree about
+the same file, that is recorded rather than reconciled — see ADR-0009's accepted-risks table.
 
 `plies` is recorded separately from `truncatedAtPly` because the worst failures are the ones that lose
 moves while reporting success: `unterminated-comment.pgn` drops four plies and the termination marker
