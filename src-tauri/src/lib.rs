@@ -11,6 +11,7 @@
 //! 2. **Everything the frontend calls goes through `src/shell/ipc.ts`** on the other side,
 //!    which is what keeps ADR-0001 reversible.
 
+pub mod files;
 pub mod import;
 
 use std::sync::{Mutex, PoisonError};
@@ -90,11 +91,39 @@ fn import_pgn_text(text: String, state: tauri::State<'_, ImportState>) -> import
     importer.import_text(&text)
 }
 
+/// Import one or more PGN files.
+///
+/// A thin wrapper, deliberately: everything it does is in [`files::import_files`], which knows
+/// nothing about Tauri and is therefore compiled and tested before handover. What is *not*
+/// verifiable here is this signature and the handler registration below — as always.
+///
+/// Like [`import_pgn_text`] it returns no `Result`: an unreadable file is data in that file's
+/// outcome, not a failed command. **Unlike it, this can report several failures** — see the
+/// note in [`files`].
+#[tauri::command]
+fn import_pgn_files(
+    paths: Vec<String>,
+    state: tauri::State<'_, ImportState>,
+) -> Vec<files::FileImport> {
+    let mut importer = state.0.lock().unwrap_or_else(PoisonError::into_inner);
+    files::import_files(&mut importer, &paths)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Both plugins are first-party, `Apache-2.0 OR MIT`, and reached only through
+        // `src/shell/` on the frontend side (ADR-0001). `dialog` is the native file picker
+        // that B-069 lists as an open platform surface; `opener` is B-117, so an external URL
+        // opens in the user's browser instead of navigating the app window away from the app.
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(ImportState::default())
-        .invoke_handler(tauri::generate_handler![app_info, import_pgn_text])
+        .invoke_handler(tauri::generate_handler![
+            app_info,
+            import_pgn_text,
+            import_pgn_files
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

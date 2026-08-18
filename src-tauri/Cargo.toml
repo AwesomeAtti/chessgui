@@ -27,6 +27,21 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# B-007 milestone 4 and B-117. Both are first-party Tauri plugins, both `Apache-2.0 OR MIT`
+# — checked against the resolved metadata rather than assumed, per the standing licence
+# constraint — and both are reached only through `src/shell/` on the frontend side (ADR-0001).
+#
+# `dialog` is the native file picker, which B-069 lists as an open platform surface: it is the
+# reason file import got its own milestone rather than riding along with paste. It pulls in
+# `tauri-plugin-fs` transitively; we grant no `fs:` permission, because the *reading* is done
+# by our own command with paths the user chose, and a blanket filesystem permission would be a
+# much larger surface than this feature needs.
+#
+# `opener` exists so an external URL opens in the user's browser. In a webview a bare anchor
+# navigates the app window away from the app — see B-117, and do not "just add target=_blank".
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+
 # ADR-0003: Rust owns bulk PGN parsing. ADR-0009: the libraries are the only validator.
 #
 # **`shakmaty` is deliberately not listed here**, though `pgn-reader` depends on it and re-exports it.

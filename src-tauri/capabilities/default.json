@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window's permissions. Kept deliberately small: every entry here is a capability the app can reach from JavaScript, so this file is the actual attack surface rather than the dependency list. Added at B-007 milestone 4, which is the first feature needing a plugin.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "opener:allow-open-url",
+    "opener:allow-default-urls"
+  ]
+}
