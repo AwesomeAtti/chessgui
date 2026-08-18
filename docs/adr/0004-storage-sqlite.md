@@ -79,3 +79,17 @@ register (handover risk 5) says the failure mode here is deliberation, not error
   table and name normalisation), B-059 (partial dates), B-060 (full tag set as JSON) all get
   baked into import code and every query, and are expensive to change regardless of which
   engine sits underneath. Decide them deliberately at B-054.
+
+## Addendum, session 9 (B-011) — two "source of truth" claims, not one
+
+Raised in review of the B-011 spec: condition 1 above ("the database stays derivable") and
+ADR-0005's "store the raw thing" rule sound like the same claim and are not. **This ADR's
+derivability condition is about the original file on the user's disk** — it is what lets the
+whole database be dropped and rebuilt from scratch, which is the reasoning that justified
+downgrading this to notify-and-proceed in the first place. **ADR-0005's rule is about the `pgn`
+column on each row** — a verbatim copy captured at import time, which is what the running app
+actually reads from once a game exists in the database. The two are related, not identical: the
+per-row copy makes normal operation self-sufficient (no game ever depends on its source file
+still existing at its original path to be opened, searched, or exported); the original file is
+what the *whole-database* rebuild promise depends on if the database itself is ever lost. Losing
+a source file after import costs the rebuild safety net for that one game, not the game itself.
