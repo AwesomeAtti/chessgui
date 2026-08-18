@@ -3,7 +3,13 @@ name = "chessgui"
 version = "0.1.0"
 description = "A local-first desktop chess database and GUI"
 edition = "2021"
-rust-version = "1.77.2"
+# **Measured at B-007 milestone 2, and it corrects a claim rather than restating one (B-094).**
+# The previous value here was 1.77.2, which has been untrue since session 5 added `pgn-reader`:
+# that crate declares `rust-version = "1.88"` and the `shakmaty 0.30.1` it pulls in declares
+# `1.95`. So the floor is set by the dependency graph, not by our source, and CI has pinned
+# 1.95.0 all along. Read from the crates' own manifests; not verifiable by compiling here,
+# because the AI sandbox can reach crates.io but not the toolchain archive.
+rust-version = "1.95"
 license = "GPL-3.0-or-later"
 publish = false
 
@@ -34,6 +40,15 @@ serde_json = "1"
 # shakmaty returns as a direct dependency when Rust genuinely needs positions — the position index
 # (B-018/B-042) and engine analysis (B-019), both post-MVP — and the `variant` feature comes with it.
 pgn-reader = "0.29"
+
+# ADR-0005's `normalisedName` is specified as accent-stripped, and stripping accents correctly means
+# Unicode decomposition rather than a hand-written table (AGENTS.md: industry standards first).
+# MIT OR Apache-2.0, so GPL-3.0-or-later compatible — checked before adding, per the standing
+# constraint. Its one dependency, `tinyvec`, is Zlib OR Apache-2.0 OR MIT.
+#
+# It is not a licence to guess: see `import::derive::normalise_name`, where decomposition alone was
+# wrong for Cyrillic and a test caught it.
+unicode-normalization = "0.1"
 
 # An integration test in `tests/` can only use the crate's public API plus dev-dependencies, so
 # serde_json is listed twice on purpose. Same version, already in the graph, so it costs no extra
