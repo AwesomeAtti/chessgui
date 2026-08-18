@@ -65,6 +65,13 @@ pgn-reader = "0.29"
 # wrong for Cyrillic and a test caught it.
 unicode-normalization = "0.1"
 
+# B-011: local persistence. `bundled` compiles SQLite from source and statically links it, so
+# there is no dependency on whatever SQLite version (or absence of one) ships on the user's
+# system across Windows/macOS/Linux — the same portability reasoning that already governs this
+# project's CI matrix (B-046). MIT, GPL-3.0-or-later compatible, checked before adding per the
+# standing licence constraint.
+rusqlite = { version = "0.40", features = ["bundled"] }
+
 # An integration test in `tests/` can only use the crate's public API plus dev-dependencies, so
 # serde_json is listed twice on purpose. Same version, already in the graph, so it costs no extra
 # build — `tests/fixtures_contract.rs` needs it to read `fixtures/pgn/expected.json`.
