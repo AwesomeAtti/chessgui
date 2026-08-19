@@ -9,8 +9,14 @@
 **Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 17) ·
 **Kit version:** 0.2.0
 
-**State in one line (session 17):** **B-010 is done — composed library filters are built,
-verified, and confirmed working by the owner in the real app.** It is a criterion-row builder (Finder/Music/Lightroom shape)
+**State in one line (session 17):** **v0.1.0 is published, with installers for macOS (both
+architectures), Windows and Linux — the project has shipped something for the first time.** Also
+this session: **B-010 (composed filters) is done and owner-confirmed**, and **B-033 is finally
+measured**, which changed what it means — filtering is 25-60x inside budget and *rendering* is
+one to two orders of magnitude outside it, so virtualisation is now evidence-backed rather than
+anticipated. The MVP's remaining blocker is not code: **B-070, testers, is now the critical
+path** — there are Windows and Linux binaries in the wild that nobody has ever run. B-010 is a
+criterion-row builder (Finder/Music/Lightroom shape)
 plus applied-state chips, not the fixed form that was mocked first and not the pill bar that was
 recommended second; **both changed on evidence, and the second time the owner asked for the
 survey that overturned the AI's own recommendation.** Also settled this session: the owner's
@@ -82,7 +88,9 @@ no longer what the app does.
 
 ## Active work
 
-**B-010 is done, owner-confirmed, committed and pushed.** Full detail in the B-010 backlog row;
+**Nothing is half-built.** Session 17 finished three things: B-010 (composed filters), B-032's
+bundling half (the release pipeline and a published v0.1.0), and B-033's measurement. Full detail
+in the B-010 backlog row;
 the short version is a pure `filters.ts` model (28 unit tests) plus `FilterPanel` (authoring),
 `FilterChips` (applied state) and `filterLabels` (shared catalogue keys), with the criteria owned
 by `App.tsx` rather than `LibraryView` because that view unmounts on every game-tab switch.
@@ -105,6 +113,12 @@ stale within minutes and `git status` is authoritative. This file carried "`main
 ahead of `origin/main`" across several sessions after those commits had in fact been pushed, and
 then immediately repeated the mistake by committing a line asserting that session 17's own work
 was uncommitted — while committing it. Say what was *built*, not what was *committed*.
+
+**v0.1.0 is published** — `.dmg` (arm64 and x86_64), `.msi`/`.exe`, `.deb`/`.rpm`/`.AppImage`,
+all unsigned. Built by `.github/workflows/release.yml` on a `v*` tag. Two things learned the hard
+way and recorded in the B-032 backlog row: the Windows bundler reads `bundle.icon` and does not
+scan the icons directory (a `.ico` on disk is not enough), and deleting/re-pushing a tag fires the
+workflow twice.
 
 **Files touched session 17:** new
 `src/features/library/{filters.ts,filters.test.ts,FilterPanel.tsx,FilterChips.tsx,filterLabels.ts}`;
@@ -253,9 +267,14 @@ Neither blocks anything above; both make later work better-founded.
    produces installers for both and there is nobody to run them. This stopped being a code task
    and became the critical path, and it is a recruiting job with a long lead time wearing a
    release job's clothes — which is precisely the shape risk 5 below predicted.
-2. **B-033's remaining half, still not measured** — 10k rows rendered, <200ms filtered search.
-   The only MVP performance claim never checked, and measurable on one machine without any
-   testers; do not let it wait behind B-070.
+2. **B-033 — implement virtualisation.** No longer a measurement task: session 17 measured it
+   and the numbers are in the backlog row. Filtering is fine (3-8ms at 10k games); the table
+   renders every row into the DOM and that is what misses the target. TanStack Virtual is the
+   natural fit — same maintainer as the v8 table already in use, so no new vendor. **Watch the
+   interaction with B-008's JS-computed column widths and the `event` fill column**, which assume
+   a single `<colgroup>` over a fully-rendered table. **Calibrate first:** the container numbers
+   are inflated by unknown hardware, and clicking a column header in the real app at 3,412 games
+   converts the whole table in five seconds.
 3. **Signing** (B-032's expensive half) — unsigned macOS builds report as "damaged", which reads
    as a corrupt download rather than a policy block, so the first tester report will be a bug
    that isn't one. Whatever ships to testers needs install instructions alongside it.
