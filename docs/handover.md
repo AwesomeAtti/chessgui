@@ -6,17 +6,19 @@
 > `docs/session-archive.md`, not here (see B-118). If an entry below would take more than a
 > few sentences to justify, put the reasoning in the archive and link to it.
 
-**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 12) ·
+**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 13) ·
 **Kit version:** 0.2.0
 
-**State in one line:** **B-008 milestone 2 (column visibility) is built, verified in the AI
-sandbox (typecheck/check:i18n/build, headless-Playwright), and committed locally — `main` is 3
-commits ahead of `origin/main`, none pushed** (still the owner's call, per B-031's open question
-about repo-public timing). **Not yet looked at by the owner on their own machine** — visual work
-isn't verified until a human has. **Session 12 added no code**, only backlog entries: four more
-`LibraryView` column features (drag-to-reorder, reset, default-order change, per-column min/max
-width), explicitly held back rather than built — the owner wants them batched into one pass
-rather than shipped one at a time. See "Next actions" below.
+**State in one line:** **B-008 is fully done — all six milestones (sort, visibility, reorder,
+reset, default order, resize with min/max width) built, verified in the AI sandbox, committed
+locally.** `main` is 5 commits ahead of `origin/main`, **none pushed, none looked at by the
+owner in the real app yet** — that's the standing gate before any of this counts as verified.
+Session 13 built the four milestones session 12 had logged and deliberately held back
+(reorder/reset/default-order/resize), all in one pass as the owner asked. One correction
+happened mid-build, same shape as milestone 2's: a first mockup used a web-app affordance (a
+grip icon for drag-to-reorder) that turned out not to match the desktop convention once checked
+against Explorer/Excel — caught by asking "what's the pattern for desktop apps" before building,
+not after. Next up: owner review + push, then B-010's filter panel.
 
 **This session: B-008 milestone 2 (column visibility), including a revised design decision.**
 Right-click any header now opens a checklist of hideable columns (TanStack's built-in
@@ -79,25 +81,34 @@ no longer what the app does.
 
 ## Active work
 
-**B-008 milestones 1 (sort) and 2 (column visibility) are both built and committed locally.**
-Nothing is half-built or uncommitted. `main` is one commit (`8079f2e`) ahead of `origin/main` —
-push is the owner's call, not yet made this session.
+**B-008 is done — all six milestones.** Nothing is half-built or uncommitted. `main` is 5
+commits ahead of `origin/main` — push is the owner's call, not yet made.
 
-**Files touched this session:** `src/features/library/LibraryView.tsx` (right-click header →
-column-visibility menu, TanStack's built-in `columnVisibility` state), `src/i18n/locales/en.ts`
-(`library.columnMenu.*`, three new keys), `src/styles.css` (`.column-menu*` rules), plus
-`docs/backlog.md` and this file. No new dependency — same `@tanstack/react-table` already added
-for milestone 1.
+**Files touched this session (13):** `src/features/library/LibraryView.tsx` (drag-to-reorder via
+native HTML5 drag-and-drop on the header's own click target, `columnSizing`/`columnOrder`
+TanStack state, a `<colgroup>` driving column widths so resize/reorder have one source of truth
+instead of fighting the old fixed-`rem` CSS), `src/i18n/locales/en.ts` (`library.columnMenu.reset`),
+`src/styles.css` (`.col-resizer`, `.dragging`, `.drop-target`; removed the now-redundant
+`.col-elo`/`.col-date`/`.col-result`/`.col-eco` width rules), plus `docs/backlog.md` and this
+file. No new dependency — same `@tanstack/react-table` already in use since milestone 1.
 
-**Next planned work: owner review of milestone 2 in the real app, then B-010's Option C filter
-panel** (a "Filter" control opening composed player/event/date/result/ECO criteria, active
-filters shown as removable chips — decided in session 10 over per-column header filtering, which
-`docs/ui-survey.md`'s survey found no precedent for in any surveyed product, chess or general).
-That's also where the still-unmeasured half of B-033 (rendering 10k rows, <200ms filtered search)
-finally becomes testable. Mock any further layout change before coding it (AGENTS.md's mandatory
-rule, and worth re-reading this session's "revised design decision" note above before doing so —
-check whether a web-app survey and a desktop-app survey would actually agree before presenting
-options as if they do).
+**One design correction mid-build, worth internalising as a standing habit rather than a one-off
+fix:** the first mockup for drag-to-reorder put a small grip icon (⠿) on every header, the way
+Notion/Trello/most web apps do it. Checked against the actual desktop precedent before building
+(Windows Explorer, Excel) rather than after — Explorer drags the header cell itself, no grip;
+Excel's gesture is different again (edge + Shift) and specific to spreadsheet semantics, not
+applicable here. Built the Explorer-style version. **The lesson from both milestone 2 and this:
+when mocking anything with a real-world desktop precedent, check that precedent before showing
+options, not after the owner asks whether desktop conventions differ.**
+
+**Next planned work: owner review of the whole B-008 feature set in the real app (right-click a
+header, try dragging one, try resizing one, try Reset columns), then push, then B-010's Option C
+filter panel** (a "Filter" control opening composed player/event/date/result/ECO criteria, active
+filters shown as removable chips — decided in session 10). That's also where the still-unmeasured
+half of B-033 (rendering 10k rows, <200ms filtered search) finally becomes testable. Mock any
+further layout change before coding it (AGENTS.md's mandatory rule) — and check real-world
+precedent (web vs. desktop, or whatever's relevant) as part of that mock, not as a follow-up
+question the owner has to ask.
 
 ## Standing constraints
 
@@ -212,26 +223,19 @@ Neither blocks anything above; both make later work better-founded.
 
 ## Next actions
 
-1. **Owner: look at B-008 milestone 2 (column visibility) in the real running app**, and push —
-   `main` is now 3 commits ahead of `origin/main` (`8079f2e`, plus two docs-only commits from
-   this session's follow-up). Right-click any table header to open it.
-2. **Four more `LibraryView` column features, requested after using milestone 2, logged against
-   B-008/B-085 but explicitly held back rather than built (session 12):** drag-to-reorder columns,
-   a "Reset columns" action, changing the shipped default order (Date first), and per-column
-   min/max width (e.g. locking Elo to its ~4-character content). **The owner's own reasoning for
-   holding them: "if we change list view behaviour I want to address multiple requirements at
-   once"** — batch these four together as one pass over `LibraryView.tsx` rather than one PR per
-   item, since the trivial one (default order) touches the same column array the other three
-   restructure anyway. Full detail and sizing in the B-008 backlog row. Doing this batch is the
-   natural next session, ahead of B-010, since it's the same feature area already open.
-3. **B-085's settings-storage decision needs making before persistence lands** (order/visibility/
-   widths surviving a relaunch) — not before the interaction itself ships. Sort and visibility
-   already work as session-only state; reorder/resize/reset can do the same at first and gain
-   persistence once B-085 is decided, rather than blocking milestone 3-6 on it.
-4. **B-010 — the Option C composed filter panel.** Where B-033's remaining half (10k-row render,
-   <200ms filtered search) finally becomes measurable. Mock the layout before coding it.
-5. Then `docs/architecture.md` (the remaining half of B-055).
-6. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
+1. **Owner: look at all of B-008 in the real running app**, and push — `main` is 5 commits ahead
+   of `origin/main`. Try each: right-click a header (menu, hide, Reset columns), drag a header to
+   reorder, drag a resize handle on White/Black/Event (Elo/Result/Date/ECO are deliberately
+   locked, no handle), click a header with no drag movement to confirm sort still works.
+2. **B-085's settings-storage decision still needs making before any of this persists** across a
+   relaunch — order/visibility/width are all session-only right now, same as sort always was.
+   Not urgent; nothing is blocked on it, the interaction already works without it.
+3. **B-010 — the Option C composed filter panel.** Where B-033's remaining half (10k-row render,
+   <200ms filtered search) finally becomes measurable. Mock the layout before coding it, and
+   check real-world precedent (web-app vs. desktop-app conventions, same as B-008's two rounds)
+   as part of building that mock rather than after presenting it.
+4. Then `docs/architecture.md` (the remaining half of B-055).
+5. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
    app — `src-tauri/capabilities/default.json` governs both, and a wrong permission identifier
    fails at runtime with a completely green build (see the Environment notes below).
 
