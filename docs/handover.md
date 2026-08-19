@@ -9,9 +9,8 @@
 **Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 17) ·
 **Kit version:** 0.2.0
 
-**State in one line (session 17):** **B-010's filter feature is built and fully verified in the
-sandbox, and is waiting on the owner to look at it in the real app** — per the standing rule
-below, that means it is not done. It is a criterion-row builder (Finder/Music/Lightroom shape)
+**State in one line (session 17):** **B-010 is done — composed library filters are built,
+verified, and confirmed working by the owner in the real app.** It is a criterion-row builder (Finder/Music/Lightroom shape)
 plus applied-state chips, not the fixed form that was mocked first and not the pill bar that was
 recommended second; **both changed on evidence, and the second time the owner asked for the
 survey that overturned the AI's own recommendation.** Also settled this session: the owner's
@@ -83,17 +82,23 @@ no longer what the app does.
 
 ## Active work
 
-**B-010 milestones 1 and 2 are built and uncommitted.** Full detail in the B-010 backlog row;
+**B-010 is done and owner-confirmed, but uncommitted.** Full detail in the B-010 backlog row;
 the short version is a pure `filters.ts` model (28 unit tests) plus `FilterPanel` (authoring),
 `FilterChips` (applied state) and `filterLabels` (shared catalogue keys), with the criteria owned
 by `App.tsx` rather than `LibraryView` because that view unmounts on every game-tab switch.
-Verified by typecheck, 114 tests, `check:i18n`, and a headless-Chromium pass driving the real
-components — **which under this project's own standing rule counts as "didn't break anything
-else", not as verification.** The owner has not looked at it yet.
+Verified by typecheck, 114 tests, `check:i18n`, a headless-Chromium pass driving the real
+components, **and the owner exercising it in the running app, where it worked first time.**
 
-**Two things need doing before this can be called done:** the owner exercising it in the real
-app, and B-033's remaining half (10k-row render, <200ms filtered search), which is now finally
-testable and has never been measured.
+**That last part is worth not glossing over.** Three sessions running, headless-green preceded a
+feature that did not work on the owner's machine; this time it predicted correctly. The
+difference is not luck and it bounds the rule: B-010 involves no drag gesture, no interaction on
+a native form control under WebKit's implicit pointer capture, and no `table-layout: fixed`. Those
+three remain the categories where headless proves nothing here; outside them it is real evidence,
+and it is what caught the field picker being silently clipped by an `overflow` ancestor this
+session. See project memory `wkwebview_vs_headless.md`.
+
+**Still outstanding for the MVP core:** B-033's remaining half (10k-row render, <200ms filtered
+search), now finally testable and never yet measured.
 
 **`_to_delete/` exists at the repo root and should be deleted by hand.** It holds the throwaway
 visual-verification harness (`_preview.tsx`, `preview.html`, `vite.preview.config.ts`,
@@ -238,10 +243,10 @@ Neither blocks anything above; both make later work better-founded.
 
 ## Next actions
 
-1. **B-010 — the owner exercises the filter UI in the real app.** Everything else about it is
-   done and green; nothing else can close it. Worth trying specifically: the field picker (it is a
-   popover inside a scrolling panel, which is exactly the class of thing headless verification has
-   missed before), the date range, and whether removing the last chip restores all rows.
+1. **Commit session 17's work** — it is verified and owner-confirmed but still uncommitted.
+   Two commits: the survey (`docs/ui-survey.md`) stands on its own, then the feature and the
+   remaining docs. Never `git add -A`: `_to_delete/` and any `.fuse_hidden*` orphans are sitting
+   in the tree and this repo is public.
 2. **B-033's remaining half, now testable** — 10k rows rendered, <200ms filtered search. This is
    the only MVP performance claim never measured, and the project's own risk register says every
    measured assumption so far turned out misjudged.
