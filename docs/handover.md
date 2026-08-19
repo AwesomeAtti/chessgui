@@ -6,14 +6,19 @@
 > `docs/session-archive.md`, not here (see B-118). If an entry below would take more than a
 > few sentences to justify, put the reasoning in the archive and link to it.
 
-**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 14) ·
+**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 15) ·
 **Kit version:** 0.2.0
 
-**State in one line:** **B-008's owner review (session 13's next action) surfaced two real bugs,
-both fixed this session and re-verified.** Everything the sandbox's headless Chromium had passed
-still didn't catch either one — both are specific to the real app's WKWebView. Fix commit not
-yet pushed; `main` is now 6 commits ahead of `origin/main`. Owner needs to look again before this
-counts as done.
+**State in one line:** **Column reorder needed a second fix (session 15) — session 14's fix was
+verified headlessly but still didn't work in the owner's real app.** Root cause this time was
+`<button>`-specific: WebKit's native form controls implicitly capture the pointer on press, which
+can suppress `mousemove` dispatch to `window` entirely while held — headless Chromium doesn't
+have this behavior, so it kept passing there while failing on the owner's machine. Fixed by
+switching to Pointer Events with explicit `setPointerCapture`. Not yet pushed; not yet looked at
+by the owner in the real app. **Two rounds in a row where sandbox-green didn't predict the real
+app's behavior on this one interaction — treat any future report of "still doesn't work" on
+reorder/resize/drag as a strong signal to stop trusting headless verification for that class of
+bug and ask the owner for more diagnostic detail before iterating blind a third time.**
 
 **This session (14): two WKWebView-only bugs found by the owner, both fixed and re-verified.**
 The owner tested session 13's B-008 build in the real app and reported: "I cannot drag columns to
@@ -55,6 +60,31 @@ machine (the first was the paste-listener location bug, session 8). Only fronten
 looked at by the owner, which is exactly the standing gate this project's own rules call out.
 Worth restating: sandbox-green is necessary, not sufficient, for anything touching drag-and-drop,
 native input, or `table-layout: fixed`'s browser-specific redistribution behaviour.
+
+**Session 15: column reorder still didn't work after session 14's fix — round two.** The owner
+reported, after session 14's supposedly-fixed build: "I cannot drag columns to reorder" (column
+resize was explicitly paused/deprioritized for this report — not re-tested). Session 14's fix
+(hand-rolled `mousedown`/`mousemove`/`mouseup`) had been verified headlessly and looked correct,
+but headless Chromium apparently still couldn't reproduce whatever was actually breaking it.
+**Root cause: `.th-sort` is a real `<button>` element, and WebKit's native form controls
+implicitly capture the pointer on press — this can suppress `mousemove` dispatch to `window`
+entirely while the button is held**, which headless Chromium does not reproduce (Chromium doesn't
+apply this implicit capture the same way) and which resize never hit because its handle
+(`.col-resizer`) is a plain `<div>`, not a form control. Fixed by switching from Mouse Events to
+Pointer Events with explicit `setPointerCapture()`/`pointercancel` handling, which overrides
+whatever implicit capture the browser would otherwise apply. **This introduced a second, more
+subtle bug caught before shipping, not by the owner:** `setPointerCapture` also pins the
+`pointerup` event's target to the origin header regardless of where the cursor actually ends up,
+which means the browser's compatibility `click` event still fires on the *dragged-from* header
+after a completed reorder — without a fix, every successful drag also silently toggled sort on
+the column that had just been dragged away. Fixed with a `suppressNextClickRef` flag set whenever
+a drag crosses the movement threshold, consumed (and cleared) by the header's own `onClick`
+before it would otherwise call `getToggleSortingHandler()`. Re-verified headlessly (reorder,
+plain click still sorts, click-after-drag no longer toggles sort, resize/reset unaffected) plus
+the full `typecheck`/`check:i18n`/`build`/`test` chain — **but headless verification has now
+missed this exact interaction twice in a row, so that re-verification should be read as "didn't
+regress anything else," not as confirmation the fix works in the real app.** Not pushed; not yet
+looked at by the owner. Only `src/features/library/LibraryView.tsx` changed.
 
 **This session: B-008 milestone 2 (column visibility), including a revised design decision.**
 Right-click any header now opens a checklist of hideable columns (TanStack's built-in
@@ -117,14 +147,23 @@ no longer what the app does.
 
 ## Active work
 
-**B-008's two owner-reported bugs (reorder, resize-bleed) are fixed and re-verified.** Nothing is
-half-built or uncommitted. `main` is 6 commits ahead of `origin/main` — push is the owner's call,
-not yet made. Owner needs to look at the fix in the real app before this counts as done.
+**Column reorder has now had two fix attempts (sessions 14 and 15); neither has been confirmed
+working by the owner yet.** Resize (fixed session 14) has not been re-reported as broken. Nothing
+is half-built or uncommitted. `main` is 7 commits ahead of `origin/main` — push is the owner's
+call, not yet made. **Owner needs to look at reorder specifically in the real app before this
+counts as done** — headless verification has missed this interaction twice already and should not
+be trusted alone for it a third time.
 
-**Files touched this session (14):** `src/features/library/LibraryView.tsx` only (native HTML5
-DnD replaced with hand-rolled mouse-event dragging; explicit JS-computed pixel widths for the
-table and every `<col>`, replacing reliance on CSS `table-layout: fixed`'s own redistribution).
-Plus `docs/backlog.md` and this file. No new dependency.
+**Files touched this session (15):** `src/features/library/LibraryView.tsx` only (reorder's
+`mousedown`/`mousemove`/`mouseup` replaced with `pointerdown`/`pointermove`/`pointerup` +
+`setPointerCapture`, plus a `suppressNextClickRef` guard against the spurious post-drag sort
+toggle that capture introduced). Plus `docs/backlog.md` and this file. No new dependency.
+
+**Files touched session 14:** `src/features/library/LibraryView.tsx` only (native HTML5 DnD
+replaced with hand-rolled mouse-event dragging — later found insufficient, see session 15 above;
+explicit JS-computed pixel widths for the table and every `<col>`, replacing reliance on CSS
+`table-layout: fixed`'s own redistribution — this half held up). Plus `docs/backlog.md` and this
+file. No new dependency.
 
 **Files touched session 13:** `src/features/library/LibraryView.tsx` (drag-to-reorder,
 `columnSizing`/`columnOrder` TanStack state, a `<colgroup>` driving column widths),
@@ -265,12 +304,16 @@ Neither blocks anything above; both make later work better-founded.
 
 ## Next actions
 
-1. **Owner: look at all of B-008 in the real running app again**, and push — `main` is 6 commits
-   ahead of `origin/main`. Try each: right-click a header (menu, hide, Reset columns), drag a
-   header to reorder, drag a resize handle on White/Black/Event (Elo/Result/Date/ECO are
-   deliberately locked, no handle — confirm they genuinely don't move when a neighbour resizes),
-   grow and shrink Event specifically, click a header with no drag movement to confirm sort still
-   works, try Reset columns after resizing Event.
+1. **Owner: look at reorder specifically in the real running app** — it's had two fix attempts
+   without confirmation either worked. Drag a header to reorder; also click a header with no drag
+   movement afterward to confirm sort still toggles normally, and click a header you just dragged
+   *away from* to confirm it doesn't have a stuck/wrong sort state (the click-suppression bug
+   session 15 caught and fixed before shipping). If reorder still doesn't work, the most useful
+   report is not just "still broken" but *what happens*: does the cursor change, does anything
+   highlight/move at all, does it work with a mouse but not a trackpad (or vice versa) — headless
+   testing has been an unreliable predictor for this one interaction twice running. Once reorder
+   is confirmed, also re-check resize/Reset columns (paused this session, not re-tested), then
+   push — `main` is 7 commits ahead of `origin/main`.
 2. **B-085's settings-storage decision still needs making before any of this persists** across a
    relaunch — order/visibility/width are all session-only right now, same as sort always was.
    Not urgent; nothing is blocked on it, the interaction already works without it.
