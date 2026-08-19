@@ -342,9 +342,16 @@ Deleting the line without rotating leaves a live credential in history. Rotation
 Start with the minimum (see `README.md`) and add documents as the project grows.
 
 - **`docs/handover.md`** — current state: active work, open decisions, risks, next actions.
-  Updated every session. This is the file that makes continuity possible.
+  Updated every session. This is the file that makes continuity possible. **Keep it to
+  current-state facts only** — narrative belongs in `docs/session-archive.md`.
 - **`docs/backlog.md`** — append-only system of record for all work: features, bugs, tech
-  debt, and rejected ideas. Nothing disappears.
+  debt, and rejected ideas. Nothing disappears. **Keep each item's Notes to a current-state
+  summary** — a long investigation trail belongs in `docs/backlog-archive.md`, linked by ID.
+- **`docs/session-archive.md`** — full, unedited per-session narrative moved out of
+  `docs/handover.md` once it stops being current state. Read for the reasoning behind a past
+  decision; never required reading at the start of a session.
+- **`docs/backlog-archive.md`** — full, unedited Notes-column history for backlog items whose
+  live entry has been trimmed to a summary. Search by ID.
 - **`docs/known-issues.md`** — bugs: issue, severity, status, workaround.
 - **`docs/parking-lot.md`** — good ideas not currently prioritized. Prevents scope creep while
   preserving the idea.
@@ -355,6 +362,15 @@ Start with the minimum (see `README.md`) and add documents as the project grows.
 - **`docs/milestones/`** — milestone planning (e.g. M1 Skeleton, M2 MVP, M3 Beta,
   M4 Production).
 
+**Rotation, not accumulation.** `docs/handover.md` and `docs/backlog.md` sit on the critical path
+— every session reads them before doing anything, per AGENTS.md. That makes their size a cost
+paid every session, not just once, and it rises silently because each individual addition is
+justified on its own. **At the end of any session where `docs/handover.md` would exceed roughly
+400–500 lines, or a `docs/backlog.md` item's Notes cell would exceed a short paragraph:** move the
+narrative or investigation trail to the matching archive file first, and leave a one-line summary
+plus a pointer behind. Do this as routine housekeeping the session it happens, not as a special
+cleanup project discovered later at ten times the size.
+
 ## AI context hierarchy
 
 To keep context lean, read in tiers — not everything, every time.
@@ -362,6 +378,9 @@ To keep context lean, read in tiers — not everything, every time.
 - **Every session:** `docs/handover.md`, `docs/backlog.md`, `AGENTS.md`
 - **When planning:** `docs/product-vision.md`, `docs/architecture.md`, `docs/tech-stack.md`
 - **When deciding:** `docs/adr/*`, this methodology
+- **When you need the reasoning behind something, not just the outcome:**
+  `docs/session-archive.md`, `docs/backlog-archive.md`. Never read by default — reading them
+  every session is exactly the cost archiving them was meant to remove.
 
 ## Session workflow
 
