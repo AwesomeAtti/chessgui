@@ -56,6 +56,40 @@
  * none, and the owner explicitly chose to skip building one (Explorer's own fallback is a
  * Move-Up/Move-Down button pair in its column chooser) rather than add it this pass. Worth
  * revisiting if it turns out to matter.
+ *
+ * **Two bugs found on the owner's own machine (session 14), neither visible in the sandbox's
+ * headless Chromium, both fixed here:**
+ *
+ * 1. **Reordering didn't work at all.** Built on native HTML5 drag-and-drop originally, which
+ *    worked in headless Chromium (Playwright's synthetic input goes through Chromium's own input
+ *    pipeline, which still runs the browser's native DnD state machine) but not in the real app's
+ *    WKWebView. The likely cause: this app already registers Tauri's own window-level native
+ *    drag-and-drop for PGN file imports (`ImportDialog`'s Files tab, and the paste/drop listener
+ *    in `App.tsx`) — Tauri intercepting OS-level drag sessions ahead of the webview is a known
+ *    source of conflicts with the browser's own HTML5 `draggable` API, and disabling Tauri's
+ *    drag-drop isn't an option here since file-drop import depends on it. Fixed by dropping HTML5
+ *    DnD entirely for column reordering and hand-rolling it from `mousedown`/`mousemove`/`mouseup`
+ *    instead — the same mechanism already used for resizing (`header.getResizeHandler()`), which
+ *    never had this problem for exactly that reason.
+ * 2. **Resizing one column moved locked ones too.** A `<table style="table-layout: fixed">` whose
+ *    `<colgroup>` gives every column an explicit width, and whose own resolved width (`100%`)
+ *    doesn't equal the sum of those widths, is required by the CSS table-layout algorithm to
+ *    distribute the difference across *every* column, evenly — locked columns included, since
+ *    "locked" isn't a concept CSS tables have. Fixed by giving the `<table>` itself an explicit
+ *    pixel width computed in JS (`tableWidth`, the sum of every visible column's rendered width)
+ *    instead of `100%`, and giving every `<col>` — `event` included — an explicit pixel width too,
+ *    so there is never any slack left for the browser to redistribute. `event` is the designated
+ *    fill column: a `ResizeObserver` on the scroll container feeds a live `containerWidth`, and
+ *    `event`'s width is `containerWidth` minus every other visible column's width
+ *    (`eventFillWidth`) as long as the owner hasn't resized it directly. Once the owner drags
+ *    `event`'s own resize handle (`eventManuallyResized` flips true), its width becomes
+ *    `max(the size they dragged to, eventFillWidth)` — respecting their chosen minimum while still
+ *    growing to fill extra room — via a dedicated hand-rolled resize handler
+ *    (`eventResizeRef`/`EVENT_MIN_SIZE`/`EVENT_MAX_SIZE`) rather than TanStack's built-in
+ *    `header.getResizeHandler()`, because that handler's drag-delta math starts from the column's
+ *    internal `columnDef.size` rather than its actual auto-filled rendered width and so couldn't
+ *    grow it correctly. Every other column — locked or not — renders at exactly the pixel width
+ *    its own state says, full stop; "Reset columns" also resets `eventManuallyResized`.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -155,6 +189,12 @@ function reorderColumn(
   return next;
 }
 
+// `event`'s min/max, duplicated as named constants (rather than read off its columnDef at the
+// call site) because the hand-rolled resize handler below needs them in an effect registered
+// once on mount, before any header object exists to read them from.
+const EVENT_MIN_SIZE = 120;
+const EVENT_MAX_SIZE = 640;
+
 export function LibraryView({
   games,
   query,
@@ -179,12 +219,78 @@ export function LibraryView({
   // comment) — the menu always lists every hideable column, not just the one under the cursor.
   const [columnMenuAt, setColumnMenuAt] = useState<{ x: number; y: number } | null>(null);
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
-  // Drag-to-reorder (session 13): which column is being dragged, and which header it's
-  // currently over — both null outside a drag. Two separate pieces of state rather than one
-  // "drag { from, over }" object because they update on different events (dragstart vs.
-  // dragover) and combining them would re-render the dragged header on every header it passes.
+  // Drag-to-reorder (session 13, hand-rolled from mouse events since session 14 — see the file
+  // doc comment on why HTML5 DnD doesn't work in the real app). `draggedColumnId`/`dropTargetId`
+  // are state purely so the dragged/hovered headers can be styled; the drag's actual live state
+  // (which column, whether the movement threshold has been crossed yet, which header is under
+  // the cursor right now) lives in `dragRef` instead, read fresh by the window-level listeners
+  // registered once below — using state there would mean re-subscribing those listeners on every
+  // mouse move, or reading stale values through a closure captured when the drag started.
   const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const dragRef = useRef<{
+    id: string;
+    startX: number;
+    startY: number;
+    active: boolean;
+    overId: string | null;
+  } | null>(null);
+  // Every leaf column id in current order, refreshed every render so the mouseup handler below
+  // (registered once, on mount) always reorders against the live order rather than the order at
+  // the moment the drag started.
+  const allLeafColumnIdsRef = useRef<string[]>([]);
+  // The `.table-scroll` pane's live width, for sizing the `event` fill column — see where it's
+  // used, below the row-model calculations. JS-measured rather than CSS `100%` on the table
+  // itself on purpose (same file doc comment): a `<table>` whose own width isn't an exact number
+  // is what let the browser's fixed-layout algorithm redistribute space across every column,
+  // locked ones included. `useChessground.ts` measures the board the same way and for the same
+  // reason — this isn't a new pattern for the codebase.
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (el === null) return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width !== undefined) setContainerWidth(width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Whether `event` has ever been resized directly, vs. just sitting at its auto-fill width —
+  // see where `eventWidth` is computed, below, for why this can't be inferred from `columnSizing`
+  // alone. Hand-rolled from mouse events rather than TanStack's own `getResizeHandler()`, for the
+  // same reason reordering is: `getResizeHandler()` computes its drag delta against the column's
+  // internal tracked size, which is `event`'s un-boosted default (e.g. 220) whenever it's sitting
+  // at its (larger) auto-fill width instead — dragging would silently do nothing until the delta
+  // closed that gap. This starts every drag from wherever the handle is actually rendered.
+  const [eventManuallyResized, setEventManuallyResized] = useState(false);
+  const [eventResizing, setEventResizing] = useState(false);
+  const eventResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    const onMove = (event: MouseEvent) => {
+      const drag = eventResizeRef.current;
+      if (drag === null) return;
+      const next = Math.min(
+        EVENT_MAX_SIZE,
+        Math.max(EVENT_MIN_SIZE, drag.startWidth + (event.clientX - drag.startX)),
+      );
+      setColumnSizing((prev) => ({ ...prev, event: next }));
+    };
+    const onUp = () => {
+      eventResizeRef.current = null;
+      setEventResizing(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -255,8 +361,8 @@ export function LibraryView({
         id: "event",
         header: t("library.columns.event"),
         size: 220,
-        minSize: 120,
-        maxSize: 640,
+        minSize: EVENT_MIN_SIZE,
+        maxSize: EVENT_MAX_SIZE,
         cell: (info) => <span title={info.getValue()}>{info.getValue()}</span>,
       }),
       columnHelper.accessor((game) => game.result ?? Number.NEGATIVE_INFINITY, {
@@ -307,7 +413,51 @@ export function LibraryView({
     setColumnOrder([]);
     setColumnVisibility({});
     setColumnSizing({});
+    setEventManuallyResized(false);
   }
+
+  allLeafColumnIdsRef.current = table.getAllLeafColumns().map((c) => c.id);
+
+  // Drag-to-reorder's actual mechanics (session 14 — see the file doc comment). Registered once,
+  // on mount: `mousedown` on a header (below) just seeds `dragRef`, and everything else happens
+  // here so a drag can continue even if the cursor leaves the header that started it. A 4px
+  // movement threshold is what keeps an ordinary sort click from ever being treated as a drag —
+  // native HTML5 DnD used to give this distinction for free; hand-rolling it means rebuilding it.
+  useEffect(() => {
+    const onMove = (event: MouseEvent) => {
+      const drag = dragRef.current;
+      if (drag === null) return;
+      if (!drag.active) {
+        const dx = Math.abs(event.clientX - drag.startX);
+        const dy = Math.abs(event.clientY - drag.startY);
+        if (dx < 4 && dy < 4) return;
+        drag.active = true;
+        setDraggedColumnId(drag.id);
+      }
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      const th = target instanceof Element ? target.closest("th[data-column-id]") : null;
+      const overId = th?.getAttribute("data-column-id") ?? null;
+      const resolved = overId !== null && overId !== drag.id ? overId : null;
+      if (resolved !== drag.overId) {
+        drag.overId = resolved;
+        setDropTargetId(resolved);
+      }
+    };
+    const onUp = () => {
+      const drag = dragRef.current;
+      dragRef.current = null;
+      setDraggedColumnId(null);
+      setDropTargetId(null);
+      if (drag === null || !drag.active || drag.overId === null) return;
+      setColumnOrder(reorderColumn(drag.id, drag.overId, allLeafColumnIdsRef.current));
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   const rows = table.getRowModel().rows;
   // The order the user actually sees, for keyboard nav and the empty-state check below — the
@@ -393,6 +543,32 @@ export function LibraryView({
 
   const hideableColumns = table.getAllLeafColumns().filter((column) => column.getCanHide());
 
+  // Every visible column's rendered width, computed in JS rather than left to the browser's own
+  // fixed-table-layout algorithm — see the file doc comment's bug-fix note. `event` is the one
+  // exception: until it's been resized directly, its rendered width is simply "whatever's left of
+  // the container after every other visible column" — full stop, not `max`-ed against its own
+  // tracked size, because that size is a stale default (`columnDef.size`, 220) that has nothing to
+  // do with where the column is actually rendered, and `max`-ing against it created a one-way
+  // ratchet: `event` would auto-grow to fill the container but then never auto-shrink again, even
+  // after another column's resize freed up room it should have reclaimed. Once the owner *has*
+  // dragged `event`'s own handle (`eventManuallyResized`), `columnSizing.event` is real and it's
+  // safe to floor `event`'s width at that value while still letting it grow to fill extra room. If
+  // `event` itself is hidden, there is currently no fill column and the table simply may not reach
+  // the container's full width — a known, minor gap, not solved here.
+  const visibleHeaders = table.getHeaderGroups()[0]?.headers ?? [];
+  const fixedColumnsTotal = visibleHeaders
+    .filter((header) => header.column.id !== "event")
+    .reduce((sum, header) => sum + header.getSize(), 0);
+  const eventHeader = visibleHeaders.find((header) => header.column.id === "event");
+  const eventFillWidth = Math.max(0, containerWidth - fixedColumnsTotal);
+  const eventWidth =
+    eventHeader === undefined
+      ? 0
+      : eventManuallyResized
+        ? Math.max(columnSizing.event ?? eventHeader.getSize(), eventFillWidth)
+        : eventFillWidth;
+  const tableWidth = fixedColumnsTotal + eventWidth;
+
   return (
     <div className="library-view">
       {importReport !== null && (
@@ -416,17 +592,21 @@ export function LibraryView({
           </button>
         </div>
 
-        <div className="table-scroll">
-          <table className="game-table">
+        <div className="table-scroll" ref={tableScrollRef}>
+          <table className="game-table" style={{ width: tableWidth || undefined }}>
             <colgroup>
-              {/* Mirrors the header row exactly — same order, same visibility, same source of
-                  width — so `table-layout: fixed` never has two disagreeing ideas of a column's
-                  size (see the file doc comment on how the default sizes were chosen). */}
-              {table
-                .getHeaderGroups()[0]
-                ?.headers.map((header) => (
-                  <col key={header.id} style={{ width: header.getSize() }} />
-                ))}
+              {/* Every width here is one already computed in JS (`tableWidth`/`eventWidth`
+                  above), and the `<table>` itself gets an explicit width too — never `100%`. That
+                  combination is what keeps the browser's own fixed-layout algorithm from ever
+                  having slack to redistribute (see the file doc comment's bug-fix note): column
+                  widths only ever change because our own state changed, never as a side effect of
+                  a neighbour's resize. */}
+              {visibleHeaders.map((header) => (
+                <col
+                  key={header.id}
+                  style={{ width: header.column.id === "event" ? eventWidth : header.getSize() }}
+                />
+              ))}
             </colgroup>
             <thead
               onContextMenu={(event) => {
@@ -445,6 +625,7 @@ export function LibraryView({
                       <th
                         key={header.id}
                         scope="col"
+                        data-column-id={columnId}
                         className={[
                           className,
                           draggedColumnId === columnId ? "dragging" : "",
@@ -471,40 +652,23 @@ export function LibraryView({
                           aria-label={t("library.sortToggle", {
                             column: header.column.columnDef.header as string,
                           })}
-                          // Drag-to-reorder (session 13). Lives on the header's own click target
-                          // rather than a separate grip icon — matches Explorer/Outlook, not the
-                          // web-app grip-icon habit (see the file doc comment). A drag and a
-                          // click are mutually exclusive at the browser level (a click needs zero
-                          // pointer movement), so this never steals an ordinary sort click.
-                          draggable
-                          onDragStart={(event) => {
-                            setDraggedColumnId(columnId);
-                            event.dataTransfer.effectAllowed = "move";
-                            // Firefox requires setData for the drag to proceed at all; the value
-                            // itself is unused since state already carries `draggedColumnId`.
-                            event.dataTransfer.setData("text/plain", columnId);
-                          }}
-                          onDragOver={(event) => {
-                            event.preventDefault();
-                            if (draggedColumnId !== null && draggedColumnId !== columnId) {
-                              setDropTargetId(columnId);
-                            }
-                          }}
-                          onDragLeave={() =>
-                            setDropTargetId((current) => (current === columnId ? null : current))
-                          }
-                          onDrop={(event) => {
-                            event.preventDefault();
-                            if (draggedColumnId !== null) {
-                              const allIds = table.getAllLeafColumns().map((c) => c.id);
-                              setColumnOrder(reorderColumn(draggedColumnId, columnId, allIds));
-                            }
-                            setDraggedColumnId(null);
-                            setDropTargetId(null);
-                          }}
-                          onDragEnd={() => {
-                            setDraggedColumnId(null);
-                            setDropTargetId(null);
+                          // Drag-to-reorder (session 13; hand-rolled from mouse events since
+                          // session 14 — native HTML5 DnD doesn't survive contact with Tauri's
+                          // own window-level drag-drop, see the file doc comment). Lives on the
+                          // header's own click target rather than a separate grip icon — matches
+                          // Explorer/Outlook, not the web-app grip-icon habit. This only *starts*
+                          // the drag; the window-level `mousemove`/`mouseup` listeners above do
+                          // the rest, including the movement threshold that keeps an ordinary
+                          // sort click from ever being mistaken for one.
+                          onMouseDown={(event) => {
+                            if (event.button !== 0) return;
+                            dragRef.current = {
+                              id: columnId,
+                              startX: event.clientX,
+                              startY: event.clientY,
+                              active: false,
+                              overId: null,
+                            };
                           }}
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
@@ -512,15 +676,32 @@ export function LibraryView({
                             {SORT_GLYPH[sortState === "asc" ? "asc" : sortState === "desc" ? "desc" : "none"]}
                           </span>
                         </button>
-                        {header.column.getCanResize() && (
-                          <div
-                            className={
-                              header.column.getIsResizing() ? "col-resizer active" : "col-resizer"
-                            }
-                            onMouseDown={header.getResizeHandler()}
-                            onTouchStart={header.getResizeHandler()}
-                          />
-                        )}
+                        {header.column.getCanResize() &&
+                          (columnId === "event" ? (
+                            // Hand-rolled — see the file doc comment and `eventResizeRef` above
+                            // for why `header.getResizeHandler()` can't be used here. No touch
+                            // handler: out of scope for the same reason reordering skipped one.
+                            <div
+                              className={eventResizing ? "col-resizer active" : "col-resizer"}
+                              onMouseDown={(event) => {
+                                if (event.button !== 0) return;
+                                eventResizeRef.current = {
+                                  startX: event.clientX,
+                                  startWidth: eventWidth,
+                                };
+                                setEventManuallyResized(true);
+                                setEventResizing(true);
+                              }}
+                            />
+                          ) : (
+                            <div
+                              className={
+                                header.column.getIsResizing() ? "col-resizer active" : "col-resizer"
+                              }
+                              onMouseDown={header.getResizeHandler()}
+                              onTouchStart={header.getResizeHandler()}
+                            />
+                          ))}
                       </th>
                     );
                   })}

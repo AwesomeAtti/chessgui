@@ -6,19 +6,55 @@
 > `docs/session-archive.md`, not here (see B-118). If an entry below would take more than a
 > few sentences to justify, put the reasoning in the archive and link to it.
 
-**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 13) ·
+**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 14) ·
 **Kit version:** 0.2.0
 
-**State in one line:** **B-008 is fully done — all six milestones (sort, visibility, reorder,
-reset, default order, resize with min/max width) built, verified in the AI sandbox, committed
-locally.** `main` is 5 commits ahead of `origin/main`, **none pushed, none looked at by the
-owner in the real app yet** — that's the standing gate before any of this counts as verified.
-Session 13 built the four milestones session 12 had logged and deliberately held back
-(reorder/reset/default-order/resize), all in one pass as the owner asked. One correction
-happened mid-build, same shape as milestone 2's: a first mockup used a web-app affordance (a
-grip icon for drag-to-reorder) that turned out not to match the desktop convention once checked
-against Explorer/Excel — caught by asking "what's the pattern for desktop apps" before building,
-not after. Next up: owner review + push, then B-010's filter panel.
+**State in one line:** **B-008's owner review (session 13's next action) surfaced two real bugs,
+both fixed this session and re-verified.** Everything the sandbox's headless Chromium had passed
+still didn't catch either one — both are specific to the real app's WKWebView. Fix commit not
+yet pushed; `main` is now 6 commits ahead of `origin/main`. Owner needs to look again before this
+counts as done.
+
+**This session (14): two WKWebView-only bugs found by the owner, both fixed and re-verified.**
+The owner tested session 13's B-008 build in the real app and reported: "I cannot drag columns to
+reorder. When I resize name column, other fixed columns (like date) resize." Neither bug showed
+up in the sandbox's headless-Chromium testing that had passed before commit — both needed the
+real WKWebView to surface.
+1. **Reorder didn't work at all.** Root cause: this app already registers Tauri's own
+   window-level native drag-and-drop for PGN file import, which conflicts with the browser's own
+   HTML5 `draggable` API inside WKWebView (Playwright's synthetic input in headless Chromium
+   bypasses this entirely, which is why it passed there). Fix: dropped HTML5 DnD for column
+   reordering and hand-rolled it from `mousedown`/`mousemove`/`mouseup` instead (a `dragRef`,
+   window-level listeners registered once, a 4px movement threshold so an ordinary sort click is
+   never mistaken for a drag).
+2. **Resizing one column moved locked ones too** (e.g. resizing White also moved Date, which is
+   `enableResizing: false`). Root cause: a `<table style="table-layout: fixed">` whose `<colgroup>`
+   widths don't sum to the table's own resolved width (`100%`) is redistributed by the browser
+   across *every* column, "locked" or not — CSS tables have no such concept. Fix: the table and
+   every `<col>` now get an explicit pixel width computed in JS (`ResizeObserver` on the scroll
+   container feeds `containerWidth`), so there is never any slack for the browser to redistribute.
+   `event` is the designated fill column (an `eventManuallyResized` flag distinguishes "still pure
+   auto-fill" from "user has set an explicit floor, but it can still grow") — this went through
+   several iterations before landing (see the file's doc comment and `docs/session-archive.md` for
+   the ones that didn't work: leaving one `<col>` unset reintroduced the bug the moment that column
+   was itself resized; a sync-effect approach created a one-way ratchet where `event` could grow
+   but never shrink again).
+
+Both fixes verified with the same headless-Playwright method as before, extended with four new
+scenarios this bug class needed: reorder via synthetic mouse events (not HTML5 DnD), resizing
+White doesn't move Date, resizing Event grows/shrinks correctly from its true rendered width
+(not a stale internal default), and resizing Event then resizing White still doesn't move Date
+and doesn't reintroduce the shrink-ratchet. Also re-ran the full `typecheck`/`check:i18n`/`build`/
+`test` chain. **Lesson worth keeping: headless Chromium is not a stand-in for WKWebView on
+anything touching native drag-and-drop or Tauri's own window-level input handling** — this is the
+second time in this project a "verified, green everywhere" claim didn't survive the owner's own
+machine (the first was the paste-listener location bug, session 8). Only frontend files changed
+(`src/features/library/LibraryView.tsx`); nothing in `src-tauri/`.
+
+**Prior session (13) claimed "B-008 is done" prematurely** — verified in the sandbox, not yet
+looked at by the owner, which is exactly the standing gate this project's own rules call out.
+Worth restating: sandbox-green is necessary, not sufficient, for anything touching drag-and-drop,
+native input, or `table-layout: fixed`'s browser-specific redistribution behaviour.
 
 **This session: B-008 milestone 2 (column visibility), including a revised design decision.**
 Right-click any header now opens a checklist of hideable columns (TanStack's built-in
@@ -81,28 +117,34 @@ no longer what the app does.
 
 ## Active work
 
-**B-008 is done — all six milestones.** Nothing is half-built or uncommitted. `main` is 5
-commits ahead of `origin/main` — push is the owner's call, not yet made.
+**B-008's two owner-reported bugs (reorder, resize-bleed) are fixed and re-verified.** Nothing is
+half-built or uncommitted. `main` is 6 commits ahead of `origin/main` — push is the owner's call,
+not yet made. Owner needs to look at the fix in the real app before this counts as done.
 
-**Files touched this session (13):** `src/features/library/LibraryView.tsx` (drag-to-reorder via
-native HTML5 drag-and-drop on the header's own click target, `columnSizing`/`columnOrder`
-TanStack state, a `<colgroup>` driving column widths so resize/reorder have one source of truth
-instead of fighting the old fixed-`rem` CSS), `src/i18n/locales/en.ts` (`library.columnMenu.reset`),
-`src/styles.css` (`.col-resizer`, `.dragging`, `.drop-target`; removed the now-redundant
-`.col-elo`/`.col-date`/`.col-result`/`.col-eco` width rules), plus `docs/backlog.md` and this
-file. No new dependency — same `@tanstack/react-table` already in use since milestone 1.
+**Files touched this session (14):** `src/features/library/LibraryView.tsx` only (native HTML5
+DnD replaced with hand-rolled mouse-event dragging; explicit JS-computed pixel widths for the
+table and every `<col>`, replacing reliance on CSS `table-layout: fixed`'s own redistribution).
+Plus `docs/backlog.md` and this file. No new dependency.
 
-**One design correction mid-build, worth internalising as a standing habit rather than a one-off
-fix:** the first mockup for drag-to-reorder put a small grip icon (⠿) on every header, the way
-Notion/Trello/most web apps do it. Checked against the actual desktop precedent before building
-(Windows Explorer, Excel) rather than after — Explorer drags the header cell itself, no grip;
-Excel's gesture is different again (edge + Shift) and specific to spreadsheet semantics, not
-applicable here. Built the Explorer-style version. **The lesson from both milestone 2 and this:
-when mocking anything with a real-world desktop precedent, check that precedent before showing
-options, not after the owner asks whether desktop conventions differ.**
+**Files touched session 13:** `src/features/library/LibraryView.tsx` (drag-to-reorder,
+`columnSizing`/`columnOrder` TanStack state, a `<colgroup>` driving column widths),
+`src/i18n/locales/en.ts` (`library.columnMenu.reset`), `src/styles.css` (`.col-resizer`,
+`.dragging`, `.drop-target`; removed the now-redundant `.col-elo`/`.col-date`/`.col-result`/
+`.col-eco` width rules). No new dependency — same `@tanstack/react-table` already in use since
+milestone 1.
 
-**Next planned work: owner review of the whole B-008 feature set in the real app (right-click a
-header, try dragging one, try resizing one, try Reset columns), then push, then B-010's Option C
+**One design correction mid-build in session 13, worth internalising as a standing habit rather
+than a one-off fix:** the first mockup for drag-to-reorder put a small grip icon (⠿) on every
+header, the way Notion/Trello/most web apps do it. Checked against the actual desktop precedent
+before building (Windows Explorer, Excel) rather than after — Explorer drags the header cell
+itself, no grip; Excel's gesture is different again (edge + Shift) and specific to spreadsheet
+semantics, not applicable here. Built the Explorer-style version. **The lesson from both milestone
+2 and this: when mocking anything with a real-world desktop precedent, check that precedent before
+showing options, not after the owner asks whether desktop conventions differ.**
+
+**Next planned work: owner review of the whole B-008 feature set in the real app again** —
+right-click a header, try dragging one, try resizing White/Black/Event, try resizing Event
+specifically (both growing and shrinking), try Reset columns — **then push, then B-010's Option C
 filter panel** (a "Filter" control opening composed player/event/date/result/ECO criteria, active
 filters shown as removable chips — decided in session 10). That's also where the still-unmeasured
 half of B-033 (rendering 10k rows, <200ms filtered search) finally becomes testable. Mock any
@@ -223,10 +265,12 @@ Neither blocks anything above; both make later work better-founded.
 
 ## Next actions
 
-1. **Owner: look at all of B-008 in the real running app**, and push — `main` is 5 commits ahead
-   of `origin/main`. Try each: right-click a header (menu, hide, Reset columns), drag a header to
-   reorder, drag a resize handle on White/Black/Event (Elo/Result/Date/ECO are deliberately
-   locked, no handle), click a header with no drag movement to confirm sort still works.
+1. **Owner: look at all of B-008 in the real running app again**, and push — `main` is 6 commits
+   ahead of `origin/main`. Try each: right-click a header (menu, hide, Reset columns), drag a
+   header to reorder, drag a resize handle on White/Black/Event (Elo/Result/Date/ECO are
+   deliberately locked, no handle — confirm they genuinely don't move when a neighbour resizes),
+   grow and shrink Event specifically, click a header with no drag movement to confirm sort still
+   works, try Reset columns after resizing Event.
 2. **B-085's settings-storage decision still needs making before any of this persists** across a
    relaunch — order/visibility/width are all session-only right now, same as sort always was.
    Not urgent; nothing is blocked on it, the interaction already works without it.
@@ -251,7 +295,12 @@ project memory — `rust_verification.md` and `visual_verification.md` — read 
   not). Anything touching `tauri`, a window, or the two Tauri plugins needs the owner's machine.
 - **The UI can be rendered headless and screenshotted** (Playwright against the pre-installed
   Chromium) even without a Tauri window — useful for catching rendering faults a green build
-  can't (see `visual_verification.md`). It does not replace the owner looking at the real app.
+  can't (see `visual_verification.md`). It does not replace the owner looking at the real app —
+  **confirmed the hard way in session 14**: HTML5 drag-and-drop passed headless (Playwright's
+  synthetic input runs through Chromium's own native DnD state machine) but silently didn't work
+  at all in the real app's WKWebView, because Tauri's own window-level native drag-drop (used for
+  PGN file import) conflicts with it. Anything touching native drag-and-drop or window-level input
+  handling needs the owner's machine before it counts as verified, not just a green headless run.
 - **Full verification chain:** `npm run typecheck && npm test && npm run check:i18n && npm run
   build`, then `cargo test --manifest-path src-tauri/Cargo.toml` and `cargo clippy --all-targets
   -- -D warnings`. The Tauri crate itself only builds on the owner's machine.
