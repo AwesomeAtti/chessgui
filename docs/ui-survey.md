@@ -154,6 +154,97 @@ their own documentation, not usability data. Better than taste, weaker than a st
 on modality could not be read at all — JavaScript-rendered, the fetch returned only the header — so
 no Apple guidance is reflected above.
 
+## Sort and filter: where the controls live (B-008/B-010)
+
+> Added ahead of B-008/B-010 (game list sort, column selection, composed filters). The question
+> was "header row, header popover, or a separate panel", and the honest answer is that the
+> category and general table UX literature converge on **sort** but split three ways on
+> **filter**.
+
+**Sort is settled — nobody disputes this one.** Every source, chess-specific or general,
+converges on the same mechanism: click a column header to sort ascending, click again for
+descending, an arrow indicator shows direction. Scid vs. PC does exactly this ("the database can
+be permanently sorted by clicking column titles" — though notably its sort *mutates the file*,
+which we do not want to copy). The general pattern (ui-patterns.com's Sort By Column) says the
+same thing and adds that it's meant for tables over ~10 rows, which describes this one at any
+size past the empty state.
+
+**Filter has three real patterns in use, not two.**
+
+1. **Persistent per-column row** (Option A). Not observed in any surveyed chess product. General
+   UX sources describe it as the alternative to a dropdown-triggered filter, immediate (no
+   "Apply" button needed), but explicitly called out as **the one that scales worst** — a
+   commenter on ui-patterns.com's Table Filter pattern notes it gets unwieldy as columns and
+   distinct values grow, which is exactly this table's shape at 3,412+ rows.
+2. **Per-column header popover** (Option B). Not observed in the chess category either — no
+   surveyed product puts filter controls in the header at all. It is a known general-web pattern
+   (Material React Table and similar component libraries ship it) but isn't validated by any
+   product in this specific category.
+3. **A separate filter surface, composed and shown as active-filter state** — what both
+   chess-specific products with real search actually do, and what the general "modern app"
+   examples (Notion, and by reputation Airtable/Linear) also do. **ChessBase**: a single-line
+   quick search by default, with an "Advanced" mode opening a dedicated search mask for composed
+   criteria — headers are not involved. **Scid vs. PC**: one combobox with AND-style syntax
+   (`Kasparov+Karpov`), Reset/Negate buttons, no per-column UI at all. **Notion**: filters live
+   behind a toolbar "Filter" control, each active filter renders as a removable chip, and
+   multiple filters compose with AND/OR, nestable up to three groups.
+
+**Reading across all of it:** the chess category has never put filtering in the table headers —
+both products that filter well do it through one search surface, quick-search first and
+"advanced" for composed criteria second. The general software world's clearest "modern" example
+(Notion) does the same shape: one entry point, filters render as chips once applied, not
+permanent chrome. That's a third option worth weighing against A and B — call it **Option C**:
+keep the existing free-text box as the quick path, add a "Filter" control next to it that opens
+composed player/event/date/result/ECO criteria, and render active filters as removable chips in
+the filter bar. It reuses the Add-games dialog's own visual language (a small composed form)
+rather than inventing header chrome, and it's the only one of the three with a working precedent
+in this specific product category.
+
+**Caveat carried over from the import survey:** this is what the products' own documentation
+says, not usability research on this table specifically, and Airtable's own docs didn't yield
+detail on its sort/filter controls despite being cited by reputation as chip-based — recorded as
+unconfirmed rather than repeated.
+
+### Widening past the chess niche: is Option C a chess artifact, or the general pattern?
+
+> Chess database software is a small category — three products is a thin sample to generalise
+> from. Checked against issue trackers, project tools, and general table-UX guidance, which
+> between them have a far larger user base and more design iteration behind them.
+
+**GitHub Issues.** A hybrid, but header filtering is not part of it: labelled dropdowns
+("Filters", "Assignees", "Labels") sit in a bar above the list, plus a text query bar supporting
+`AND`/`OR` and parenthesised grouping for power users (`label:"bug" AND assignee:octocat`),
+plus a **separate** sort dropdown. Every active filter is reflected in the URL query string, so a
+filtered, sorted view is a link. No column-header controls anywhere.
+
+**Linear.** Splits the two concerns explicitly rather than treating them as one feature: a
+top-right **"Display options"** menu covers sort/group/which-properties-show, and a **separate
+Filters** entry point (sidebar) "refines the list to only issues with certain properties" —
+Linear's own docs draw this line in those words. Filters and display settings can each be saved
+as a default. Again, nothing lives in a column header.
+
+**General enterprise/SaaS table-UX guidance** (Pencil & Paper's filter-pattern analysis, the
+HashiCorp Helios design system's filter patterns) converges on the same three positioning
+options, independent of any specific product: a **filter bar** (one or more dropdowns/buttons in
+a horizontal strip above the table — rated the common, medium-complexity default), a **sidebar**
+(better for many nested categories or page-wide filtering across several components), and
+**inline/header filtering** — which both sources treat as a real option for a *wide table with
+many columns where each filter needs maximum context*, but neither treats as the default; it's
+the specialised choice, not the common one. Every source that discusses applied-filter display
+agrees on the same convention regardless of position: show each active filter as a dismissible
+chip/tag.
+
+**Conclusion: Option C is not a chess-category artifact — it's the pattern nearly every
+mature list/table UI converges on, chess or otherwise.** A filter bar (or, per GitHub/Linear, a
+filter entry point plus an independent sort control) with composed criteria and chip-rendered
+active filters is what GitHub, Linear, Notion, ChessBase, and general enterprise table-UX
+guidance all separately arrive at. Column-header filtering (Option A/B) shows up only in
+component-library demos (Material React Table and similar), not in any shipped product surveyed
+here across either category — it's a thing table libraries *can* do, not a thing widely-used
+products *choose to* do. Sort-by-header-click stays well supported on its own (this table is
+genuinely a table, unlike Linear's issue list), but composed filtering should not live in the
+headers.
+
 ## Sources
 
 - [Board window — ChessBase 18](https://help.chessbase.com/CBase/18/Eng/board_window.htm)
@@ -166,6 +257,16 @@ no Apple guidance is reflected above.
 - [Scid vs. PC — Main Menus](https://scidvspc.sourceforge.net/doc/Menus.htm)
 - [Scid vs. PC — the Import window](https://scidvspc.sourceforge.net/doc/Import.htm)
 - [En Croissant — Games and databases](https://franciscobsalgueiro-en-croissant.mintlify.app/features/games-and-databases)
+- [Scid vs. PC — Sorting the Game List](https://scidvspc.sourceforge.net/doc/GameList.htm) (sort-by-header-click, permanent; unified filter combobox with AND syntax, Reset/Negate)
+- [ChessBase — Database search basics](https://en.chessbase.com/post/getting-the-most-out-of-chessbase-15-a-step-by-step-guide-11-database-search-basics) (single-line quick search, Advanced opens a search mask — not header-based)
+- [Notion — Database views, filters, sorts & groups](https://www.notion.com/help/views-filters-and-sorts) (toolbar filter menu, chips, AND/OR groups up to 3 deep)
+- [Sort By Column — ui-patterns.com](https://ui-patterns.com/patterns/SortByColumn) (click-to-sort, arrow indicator, use above ~10 rows)
+- [Table Filter — ui-patterns.com](https://ui-patterns.com/patterns/TableFilter) (dropdown/header-row filter tradeoffs; a persistent per-column row scales worst)
+- [Design better data tables — Andrew Coyle](https://www.andrewcoyle.com/blog/design-better-data-tables) (catalogue of table interaction patterns, no scale ranking given)
+- [Filtering and searching issues and pull requests — GitHub Docs](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/filtering-and-searching-issues-and-pull-requests) (dropdown filter bar + query syntax + separate sort, URL-persisted)
+- [Display options — Linear Docs](https://linear.app/docs/display-options) (sort/group as "Display options", Filters as a separate, distinct entry point)
+- [UX Pattern Analysis: Enterprise Filtering — Pencil & Paper](https://www.pencilandpaper.io/articles/ux-pattern-analysis-enterprise-filtering) (filter bar vs. sidebar vs. inline/header, scored by scalability and use case)
+- [Filter patterns — Helios Design System (HashiCorp)](https://helios.hashicorp.design/patterns/filter-patterns) (filter bar vs. sidebar; dismissible-tag convention for applied filters)
 - [Sheets vs. dialogs vs. snackbars: what to use when — LogRocket](https://blog.logrocket.com/ux-design/sheets-dialogs-snackbars/)
 - [ChessBase 18 — Standard Layout or Custom Layout](https://en.chessbase.com/post/chessbase-18-beginner-s-tips-part-10-standard-layout-or-custom-layout)
 - [Scid vs. PC — README](https://scidvspc.sourceforge.net/README.html)
