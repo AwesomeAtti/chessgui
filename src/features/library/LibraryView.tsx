@@ -37,6 +37,25 @@
  * presence is also what guarantees a header is always available to right-click even when every
  * optional column is hidden, so there is never a need for a separate "more columns" affordance.
  * The composed filter panel (B-010) is a later, unrelated milestone — see `docs/ui-survey.md`.
+ *
+ * **Reorder, resize, default order, and reset (B-008 milestones 3, 6, 5, 4) all landed together**
+ * (session 13), because the owner asked for them as one pass rather than one PR per item.
+ * Surveyed the same way milestone 2 was, and corrected once during that survey: the first mockup
+ * put a Notion/Trello-style grip icon on every header as the drag handle, which turned out to be
+ * a web-app habit, not a desktop one — asked, checked, and confirmed against Windows Explorer and
+ * Excel. Explorer's own convention is dragging the header cell itself (no grip), which is what's
+ * built here (draggable lives on `.th-sort`, not a separate handle). Column resizing follows the
+ * same "no new dependency" line as milestones 1–2 — TanStack's built-in `columnSizing` state, a
+ * `.col-resizer` strip at each resizable header's trailing edge. `Elo` (both), `Result`, `Date`,
+ * and `ECO` are locked (`enableResizing: false`, `size === minSize === maxSize`) per the owner's
+ * request — short, fixed-format tokens that never need to flex; `White`, `Black`, and `Event` stay
+ * resizable within a min/max range, since free text genuinely varies in how much room it needs.
+ * Every column's default `size` is sized generously enough that its own header label never
+ * truncates (checked headlessly, not eyeballed — see the verification note in the B-008 backlog
+ * entry). **Reordering has no keyboard-accessible alternative** — plain HTML5 drag-and-drop has
+ * none, and the owner explicitly chose to skip building one (Explorer's own fallback is a
+ * Move-Up/Move-Down button pair in its column chooser) rather than add it this pass. Worth
+ * revisiting if it turns out to matter.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -45,6 +64,8 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   useReactTable,
+  type ColumnOrderState,
+  type ColumnSizingState,
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
@@ -114,6 +135,26 @@ function columnMenuLabelKey(id: string) {
   return null;
 }
 
+/**
+ * Move `draggedId` to sit where `targetId` currently is, within `order` (every leaf column id,
+ * visible or not — see the call site for why it has to be *every* id and not just the visible
+ * ones). A no-op, returning the same array, if either id is missing or they're identical.
+ */
+function reorderColumn(
+  draggedId: string,
+  targetId: string,
+  order: readonly string[],
+): string[] {
+  if (draggedId === targetId) return order.slice();
+  const from = order.indexOf(draggedId);
+  const to = order.indexOf(targetId);
+  if (from === -1 || to === -1) return order.slice();
+  const next = order.slice();
+  next.splice(from, 1);
+  next.splice(next.indexOf(targetId), 0, draggedId);
+  return next;
+}
+
 export function LibraryView({
   games,
   query,
@@ -130,10 +171,20 @@ export function LibraryView({
   const activeRow = useRef<HTMLTableRowElement | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  // Empty means "use the column-def order above" (Date first) — also what "Reset columns"
+  // restores, so no separate DEFAULT_COLUMN_ORDER constant is needed.
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   // Screen position only; which column was right-clicked doesn't matter (see the file doc
   // comment) — the menu always lists every hideable column, not just the one under the cursor.
   const [columnMenuAt, setColumnMenuAt] = useState<{ x: number; y: number } | null>(null);
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
+  // Drag-to-reorder (session 13): which column is being dragged, and which header it's
+  // currently over — both null outside a drag. Two separate pieces of state rather than one
+  // "drag { from, over }" object because they update on different events (dragstart vs.
+  // dragover) and combining them would re-render the dragged header on every header it passes.
+  const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -150,52 +201,83 @@ export function LibraryView({
   // result glyphs), and both can change at runtime once a second locale ships (B-075).
   const columns = useMemo(
     () => [
+      // Date first (owner's requested default order, session 13) — everything else keeps its
+      // prior relative order. Locked: short, fixed-format text ("Aug 2025") never needs to flex.
+      columnHelper.accessor((game) => game.date.parsed ?? game.date.raw, {
+        id: "date",
+        header: t("library.columns.date"),
+        meta: { className: "col-date" },
+        size: 100,
+        minSize: 100,
+        maxSize: 100,
+        enableResizing: false,
+        cell: (info) => formatPgnDate(info.row.original.date, locale) ?? t("date.unknown"),
+      }),
       columnHelper.accessor((game) => game.white.name, {
         id: "white",
         header: t("library.columns.white"),
         enableHiding: false,
+        size: 160,
+        minSize: 110,
+        maxSize: 420,
         cell: (info) => <span title={info.getValue()}>{info.getValue()}</span>,
       }),
       columnHelper.accessor("whiteElo", {
         id: "whiteElo",
         header: t("library.columns.elo"),
         meta: { className: "col-elo" },
+        size: 56,
+        minSize: 56,
+        maxSize: 56,
+        enableResizing: false,
         cell: (info) => info.getValue() ?? "",
       }),
       columnHelper.accessor((game) => game.black.name, {
         id: "black",
         header: t("library.columns.black"),
         enableHiding: false,
+        size: 160,
+        minSize: 110,
+        maxSize: 420,
         cell: (info) => <span title={info.getValue()}>{info.getValue()}</span>,
       }),
       columnHelper.accessor("blackElo", {
         id: "blackElo",
         header: t("library.columns.elo"),
         meta: { className: "col-elo" },
+        size: 56,
+        minSize: 56,
+        maxSize: 56,
+        enableResizing: false,
         cell: (info) => info.getValue() ?? "",
       }),
       columnHelper.accessor((game) => game.event ?? "", {
         id: "event",
         header: t("library.columns.event"),
+        size: 220,
+        minSize: 120,
+        maxSize: 640,
         cell: (info) => <span title={info.getValue()}>{info.getValue()}</span>,
-      }),
-      columnHelper.accessor((game) => game.date.parsed ?? game.date.raw, {
-        id: "date",
-        header: t("library.columns.date"),
-        meta: { className: "col-date" },
-        cell: (info) => formatPgnDate(info.row.original.date, locale) ?? t("date.unknown"),
       }),
       columnHelper.accessor((game) => game.result ?? Number.NEGATIVE_INFINITY, {
         id: "result",
         header: t("library.columns.result"),
         meta: { className: "col-result" },
         enableHiding: false,
+        size: 76,
+        minSize: 76,
+        maxSize: 76,
+        enableResizing: false,
         cell: (info) => t(resultKey(info.row.original.result)),
       }),
       columnHelper.accessor((game) => game.eco ?? "", {
         id: "eco",
         header: t("library.columns.eco"),
         meta: { className: "col-eco" },
+        size: 56,
+        minSize: 56,
+        maxSize: 56,
+        enableResizing: false,
         cell: (info) => info.getValue(),
       }),
     ],
@@ -210,12 +292,22 @@ export function LibraryView({
   const table = useReactTable({
     data: tableData,
     columns,
-    state: { sorting, columnVisibility },
+    state: { sorting, columnVisibility, columnOrder, columnSizing },
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
+    onColumnSizingChange: setColumnSizing,
+    columnResizeMode: "onChange",
+    enableColumnResizing: true,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
+
+  function resetColumns() {
+    setColumnOrder([]);
+    setColumnVisibility({});
+    setColumnSizing({});
+  }
 
   const rows = table.getRowModel().rows;
   // The order the user actually sees, for keyboard nav and the empty-state check below — the
@@ -326,6 +418,16 @@ export function LibraryView({
 
         <div className="table-scroll">
           <table className="game-table">
+            <colgroup>
+              {/* Mirrors the header row exactly — same order, same visibility, same source of
+                  width — so `table-layout: fixed` never has two disagreeing ideas of a column's
+                  size (see the file doc comment on how the default sizes were chosen). */}
+              {table
+                .getHeaderGroups()[0]
+                ?.headers.map((header) => (
+                  <col key={header.id} style={{ width: header.getSize() }} />
+                ))}
+            </colgroup>
             <thead
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -338,11 +440,20 @@ export function LibraryView({
                     const sortState = header.column.getIsSorted();
                     const className = (header.column.columnDef.meta as { className?: string } | undefined)
                       ?.className;
+                    const columnId = header.column.id;
                     return (
                       <th
                         key={header.id}
                         scope="col"
-                        className={className}
+                        className={[
+                          className,
+                          draggedColumnId === columnId ? "dragging" : "",
+                          dropTargetId === columnId && draggedColumnId !== columnId
+                            ? "drop-target"
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ") || undefined}
                         aria-sort={
                           sortState === "asc"
                             ? "ascending"
@@ -360,12 +471,56 @@ export function LibraryView({
                           aria-label={t("library.sortToggle", {
                             column: header.column.columnDef.header as string,
                           })}
+                          // Drag-to-reorder (session 13). Lives on the header's own click target
+                          // rather than a separate grip icon — matches Explorer/Outlook, not the
+                          // web-app grip-icon habit (see the file doc comment). A drag and a
+                          // click are mutually exclusive at the browser level (a click needs zero
+                          // pointer movement), so this never steals an ordinary sort click.
+                          draggable
+                          onDragStart={(event) => {
+                            setDraggedColumnId(columnId);
+                            event.dataTransfer.effectAllowed = "move";
+                            // Firefox requires setData for the drag to proceed at all; the value
+                            // itself is unused since state already carries `draggedColumnId`.
+                            event.dataTransfer.setData("text/plain", columnId);
+                          }}
+                          onDragOver={(event) => {
+                            event.preventDefault();
+                            if (draggedColumnId !== null && draggedColumnId !== columnId) {
+                              setDropTargetId(columnId);
+                            }
+                          }}
+                          onDragLeave={() =>
+                            setDropTargetId((current) => (current === columnId ? null : current))
+                          }
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            if (draggedColumnId !== null) {
+                              const allIds = table.getAllLeafColumns().map((c) => c.id);
+                              setColumnOrder(reorderColumn(draggedColumnId, columnId, allIds));
+                            }
+                            setDraggedColumnId(null);
+                            setDropTargetId(null);
+                          }}
+                          onDragEnd={() => {
+                            setDraggedColumnId(null);
+                            setDropTargetId(null);
+                          }}
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
                           <span className="sort-arrow" aria-hidden="true">
                             {SORT_GLYPH[sortState === "asc" ? "asc" : sortState === "desc" ? "desc" : "none"]}
                           </span>
                         </button>
+                        {header.column.getCanResize() && (
+                          <div
+                            className={
+                              header.column.getIsResizing() ? "col-resizer active" : "col-resizer"
+                            }
+                            onMouseDown={header.getResizeHandler()}
+                            onTouchStart={header.getResizeHandler()}
+                          />
+                        )}
                       </th>
                     );
                   })}
@@ -444,6 +599,18 @@ export function LibraryView({
               </button>
             );
           })}
+          <hr className="column-menu-separator" />
+          <button
+            type="button"
+            className="column-menu-item"
+            onClick={() => {
+              resetColumns();
+              setColumnMenuAt(null);
+            }}
+          >
+            <span aria-hidden="true">↺</span>
+            {t("library.columnMenu.reset")}
+          </button>
         </div>
       )}
     </div>

@@ -60,6 +60,8 @@ export const en = {
       title: "Columns",
       whiteElo: "Elo (White)",
       blackElo: "Elo (Black)",
+      // Restores order, visibility, and width to the shipped defaults (B-008 milestone 4).
+      reset: "Reset columns",
     },
     columns: {
       white: "White",

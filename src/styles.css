@@ -357,6 +357,58 @@ button {
   background: var(--selection);
 }
 
+.column-menu-separator {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 4px 2px;
+}
+
+/* Column resize handle (B-008 milestone 6). A 6px hit zone at the header's trailing inner edge
+   — narrower and it fails a fat-finger test, wider and it starts overlapping the sort button's
+   own click target. **Sits at `right: 0`, not straddling the border** (`right: -3px` would read
+   more centred, and is what a first draft used) **because `.game-table th` has `overflow:
+   hidden` for text truncation**, which clips anything positioned outside its own box — an
+   offset resizer would render as a barely-clickable sliver, half hidden by the cell it's
+   nominally attached to. The visible 2px line only appears on hover/drag; at rest it would just
+   be clutter on every one of eight headers at once. */
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
+}
+
+.col-resizer::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  right: 1px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+}
+
+.col-resizer:hover::after,
+.col-resizer.active::after {
+  background: var(--selection-strong);
+}
+
+/* Drag-to-reorder (B-008 milestone 3) feedback — dim the header being dragged, and mark the one
+   it's currently over with a leading edge showing where it'll land (see `reorderColumn`: a drop
+   inserts before the target). */
+.game-table th.dragging {
+  opacity: 0.4;
+}
+
+.game-table th.drop-target {
+  box-shadow: inset 2px 0 0 var(--selection-strong);
+}
+
 .game-table th,
 .game-table td {
   padding: 0.25rem var(--gap);
@@ -379,19 +431,10 @@ button {
   border-bottom: 1px solid color-mix(in srgb, var(--line) 40%, transparent);
 }
 
-.game-table .col-elo {
-  width: 3.5rem;
-}
-.game-table .col-date {
-  width: 7rem;
-}
-.game-table .col-result {
-  width: 4rem;
-}
-.game-table .col-eco {
-  width: 3.5rem;
-}
-
+/* Widths for .col-elo/.col-date/.col-result/.col-eco used to live here as fixed `rem` values.
+   Session 13 (B-008 milestones 3/6) moved every column's width to the `<colgroup>` — driven by
+   TanStack's `columnSizing` state, in pixels, so resizing and reordering have one source of
+   truth instead of two disagreeing ones. What's left here is formatting, not layout. */
 .game-table .col-elo,
 .game-table .col-result {
   font-variant-numeric: tabular-nums;
