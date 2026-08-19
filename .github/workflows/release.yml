@@ -1,0 +1,114 @@
+# B-032 — installers for all three platforms.
+#
+# **This is not what `ci.yml` does, and the difference matters.** `ci.yml` runs `cargo build`, so
+# it proves all three targets *compile*; it produces no installable artifact. This workflow runs
+# the Tauri bundler and attaches real installers to a draft GitHub Release.
+#
+# Tauri links against each platform's native webview, so there is no cross-compiling: every
+# target is built on a runner of that OS. macOS is built twice, once per architecture — a
+# universal binary would also work, but two slices keep each download smaller and make an
+# arch-specific failure legible instead of hidden inside a merged binary.
+#
+# **Everything this produces is unsigned.** macOS will refuse to open the .dmg without a
+# Developer ID signature and notarization (Gatekeeper reports it as "damaged", which reads as
+# corruption rather than as a policy decision, so testers need warning). Windows will show a
+# SmartScreen warning. Linux expects neither. Signing is a separate piece of work with real
+# annual costs — see B-032, and do not treat this workflow as making distribution "done".
+#
+# **Linux is built here and has still never been run** (B-066/B-070). CI compiling a WebKitGTK
+# binary is not evidence that the app works on it, and this project has been bitten three times
+# by webview-specific behaviour that compiled perfectly. Treat the Linux artifact as untested.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Bundle (${{ matrix.platform }}${{ matrix.label }})
+    permissions:
+      # Required for tauri-action to create the draft release and upload assets.
+      contents: write
+    strategy:
+      # Same reasoning as ci.yml: one platform failing must not cancel the others, because
+      # "is this break platform-specific?" is the question the matrix exists to answer.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+            label: " Apple Silicon"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+            label: " Intel"
+          - platform: ubuntu-22.04
+            args: ""
+            label: ""
+          - platform: windows-latest
+            args: ""
+            label: ""
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      # Same list as ci.yml. ubuntu-22.04 rather than latest on purpose: the bundled binary
+      # links the runner's glibc, and building on a newer Ubuntu silently raises the minimum
+      # glibc every user needs. Build old, run everywhere.
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf \
+            build-essential \
+            file \
+            wget \
+            xdg-utils
+
+      # Pinned, matching ci.yml and B-082: CI must not drift away from the toolchain the app is
+      # actually developed against. Bump both files together.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95.0"
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      # `ci`, not `install`: the lockfile is the point of running this in CI at all.
+      - run: npm ci
+
+      # tauri.conf.json's `beforeBuildCommand` already runs `npm run build`
+      # (tsc --noEmit && vite build), so the frontend is built by the bundler rather than here.
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # __VERSION__ is substituted from tauri.conf.json's `version`, which is why that file
+          # and src-tauri/Cargo.toml must be bumped together — Cargo.toml is what the running
+          # app reports in its status bar.
+          tagName: v__VERSION__
+          releaseName: chessgui v__VERSION__
+          releaseBody: |
+            Unsigned builds. macOS will need Gatekeeper overridden; Windows will show a
+            SmartScreen warning. The Linux build has not been tested on any machine (B-066).
+          # Draft, always: a release that publishes itself the moment a tag lands removes the
+          # last chance to check that four runners produced four sane artifacts.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
