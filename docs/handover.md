@@ -6,127 +6,52 @@
 > `docs/session-archive.md`, not here (see B-118). If an entry below would take more than a
 > few sentences to justify, put the reasoning in the archive and link to it.
 
-**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 15) ·
+**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 16) ·
 **Kit version:** 0.2.0
 
-**State in one line:** **Column reorder needed a second fix (session 15) — session 14's fix was
-verified headlessly but still didn't work in the owner's real app.** Root cause this time was
-`<button>`-specific: WebKit's native form controls implicitly capture the pointer on press, which
-can suppress `mousemove` dispatch to `window` entirely while held — headless Chromium doesn't
-have this behavior, so it kept passing there while failing on the owner's machine. Fixed by
-switching to Pointer Events with explicit `setPointerCapture`. Not yet pushed; not yet looked at
-by the owner in the real app. **Two rounds in a row where sandbox-green didn't predict the real
-app's behavior on this one interaction — treat any future report of "still doesn't work" on
-reorder/resize/drag as a strong signal to stop trusting headless verification for that class of
-bug and ask the owner for more diagnostic detail before iterating blind a third time.**
+**State in one line:** **B-008 is done — all six milestones built, and confirmed working by the
+owner in the real app**, including column reorder, which took three attempts across sessions
+13–15 before it actually worked on a real WKWebView (see "Sessions 13–15" below for what each
+attempt got wrong and why headless verification kept missing it). Reorder has only minimal visual
+feedback for what's being dragged and where it'll land — the owner explicitly deferred improving
+that to a later release. `main` is 7 commits ahead of `origin/main`, ready to push. Next up:
+B-010 (composed filter panel).
 
-**This session (14): two WKWebView-only bugs found by the owner, both fixed and re-verified.**
-The owner tested session 13's B-008 build in the real app and reported: "I cannot drag columns to
-reorder. When I resize name column, other fixed columns (like date) resize." Neither bug showed
-up in the sandbox's headless-Chromium testing that had passed before commit — both needed the
-real WKWebView to surface.
-1. **Reorder didn't work at all.** Root cause: this app already registers Tauri's own
-   window-level native drag-and-drop for PGN file import, which conflicts with the browser's own
-   HTML5 `draggable` API inside WKWebView (Playwright's synthetic input in headless Chromium
-   bypasses this entirely, which is why it passed there). Fix: dropped HTML5 DnD for column
-   reordering and hand-rolled it from `mousedown`/`mousemove`/`mouseup` instead (a `dragRef`,
-   window-level listeners registered once, a 4px movement threshold so an ordinary sort click is
-   never mistaken for a drag).
-2. **Resizing one column moved locked ones too** (e.g. resizing White also moved Date, which is
-   `enableResizing: false`). Root cause: a `<table style="table-layout: fixed">` whose `<colgroup>`
-   widths don't sum to the table's own resolved width (`100%`) is redistributed by the browser
-   across *every* column, "locked" or not — CSS tables have no such concept. Fix: the table and
-   every `<col>` now get an explicit pixel width computed in JS (`ResizeObserver` on the scroll
-   container feeds `containerWidth`), so there is never any slack for the browser to redistribute.
-   `event` is the designated fill column (an `eventManuallyResized` flag distinguishes "still pure
-   auto-fill" from "user has set an explicit floor, but it can still grow") — this went through
-   several iterations before landing (see the file's doc comment and `docs/session-archive.md` for
-   the ones that didn't work: leaving one `<col>` unset reintroduced the bug the moment that column
-   was itself resized; a sync-effect approach created a one-way ratchet where `event` could grow
-   but never shrink again).
+**Sessions 13–15, condensed (full detail in `docs/session-archive.md` and the B-008 row in
+`docs/backlog.md`):** Session 13 built all six B-008 milestones in one pass (sort/visibility
+already existed) and shipped them as "done" without the owner having looked yet — premature, per
+this project's own standing rule that sandbox-green isn't sufficient for anything touching
+drag-and-drop or native input. The owner's first real-app look (session 14) found two bugs
+neither headless Playwright nor the sandbox's typecheck/build chain caught: reorder didn't work
+at all (Tauri's own window-level native drag-drop, used for PGN import, conflicts with HTML5
+`draggable` inside WKWebView), and resizing one column visibly moved locked ones (CSS
+`table-layout: fixed` redistributes width across every `<col>` with an explicit size once the
+table's own resolved width doesn't match their sum — "locked" isn't a concept CSS tables have).
+Session 14 fixed resize for good (explicit JS-computed pixel widths, no CSS redistribution left
+possible) and fixed reorder by dropping HTML5 DnD for hand-rolled Mouse Events — which *also*
+turned out insufficient: session 15 found reorder still didn't work, because `.th-sort` is a real
+`<button>` and WebKit's native form controls implicitly capture the pointer on press, silently
+suppressing `mousemove` dispatch to `window`. The real fix was Pointer Events with explicit
+`setPointerCapture()`, which has its own gotcha (pinning `pointerup`'s target to the drag's
+origin, so a stray compatibility `click` needs suppressing) — documented in the code and in
+project memory (`wkwebview_vs_headless.md`). **Session 16 confirmed reorder actually works** and
+did cleanup: removed the file's inline blow-by-blow bug-fix narrative now that the outcome is
+settled (that history belongs in the archive/backlog, not code comments), leaving the doc comment
+describing only the current, working design.
 
-Both fixes verified with the same headless-Playwright method as before, extended with four new
-scenarios this bug class needed: reorder via synthetic mouse events (not HTML5 DnD), resizing
-White doesn't move Date, resizing Event grows/shrinks correctly from its true rendered width
-(not a stale internal default), and resizing Event then resizing White still doesn't move Date
-and doesn't reintroduce the shrink-ratchet. Also re-ran the full `typecheck`/`check:i18n`/`build`/
-`test` chain. **Lesson worth keeping: headless Chromium is not a stand-in for WKWebView on
-anything touching native drag-and-drop or Tauri's own window-level input handling** — this is the
-second time in this project a "verified, green everywhere" claim didn't survive the owner's own
-machine (the first was the paste-listener location bug, session 8). Only frontend files changed
-(`src/features/library/LibraryView.tsx`); nothing in `src-tauri/`.
-
-**Prior session (13) claimed "B-008 is done" prematurely** — verified in the sandbox, not yet
-looked at by the owner, which is exactly the standing gate this project's own rules call out.
-Worth restating: sandbox-green is necessary, not sufficient, for anything touching drag-and-drop,
-native input, or `table-layout: fixed`'s browser-specific redistribution behaviour.
-
-**Session 15: column reorder still didn't work after session 14's fix — round two.** The owner
-reported, after session 14's supposedly-fixed build: "I cannot drag columns to reorder" (column
-resize was explicitly paused/deprioritized for this report — not re-tested). Session 14's fix
-(hand-rolled `mousedown`/`mousemove`/`mouseup`) had been verified headlessly and looked correct,
-but headless Chromium apparently still couldn't reproduce whatever was actually breaking it.
-**Root cause: `.th-sort` is a real `<button>` element, and WebKit's native form controls
-implicitly capture the pointer on press — this can suppress `mousemove` dispatch to `window`
-entirely while the button is held**, which headless Chromium does not reproduce (Chromium doesn't
-apply this implicit capture the same way) and which resize never hit because its handle
-(`.col-resizer`) is a plain `<div>`, not a form control. Fixed by switching from Mouse Events to
-Pointer Events with explicit `setPointerCapture()`/`pointercancel` handling, which overrides
-whatever implicit capture the browser would otherwise apply. **This introduced a second, more
-subtle bug caught before shipping, not by the owner:** `setPointerCapture` also pins the
-`pointerup` event's target to the origin header regardless of where the cursor actually ends up,
-which means the browser's compatibility `click` event still fires on the *dragged-from* header
-after a completed reorder — without a fix, every successful drag also silently toggled sort on
-the column that had just been dragged away. Fixed with a `suppressNextClickRef` flag set whenever
-a drag crosses the movement threshold, consumed (and cleared) by the header's own `onClick`
-before it would otherwise call `getToggleSortingHandler()`. Re-verified headlessly (reorder,
-plain click still sorts, click-after-drag no longer toggles sort, resize/reset unaffected) plus
-the full `typecheck`/`check:i18n`/`build`/`test` chain — **but headless verification has now
-missed this exact interaction twice in a row, so that re-verification should be read as "didn't
-regress anything else," not as confirmation the fix works in the real app.** Not pushed; not yet
-looked at by the owner. Only `src/features/library/LibraryView.tsx` changed.
-
-**This session: B-008 milestone 2 (column visibility), including a revised design decision.**
-Right-click any header now opens a checklist of hideable columns (TanStack's built-in
-`columnVisibility` state, no new dependency); `White`/`Black`/`Result` are locked visible
-(`enableHiding: false`), which doubles as the guarantee that a header is always right-clickable
-even with everything optional hidden — no separate "more columns" affordance needed. **Mocked
-three structurally different options first**, per AGENTS.md's mandatory rule (toolbar button,
-table-corner icon, right-click header) as an HTML/CSS mockup, screenshotted headlessly, sent to
-the owner. **The owner's first answer picked the toolbar button** — the pattern every web-app
-source converges on (MUI X, TanStack's own docs, shadcn, GitHub Issues, Linear, Notion) — but
-then asked whether being a desktop app changes the answer. It does: Windows Explorer, Outlook,
-and desktop-style enterprise grids (AG Grid, DevExpress) all converge on right-click-the-header
-instead, which is the actual native-desktop convention rather than a web-SaaS habit. Re-surveyed,
-re-presented, owner picked right-click. **Worth remembering for any future layout mock: ask "is
-this a web pattern or a desktop pattern" before presenting options, not after the owner has to
-ask it.** Verified via typecheck/check:i18n/build and a headless-Playwright walk: open the menu,
-hide each optional column one at a time, confirm the locked columns and the menu itself still
-work with everything else hidden, confirm Escape closes it. Committed locally as `8079f2e`, not
-pushed. **This is a frontend-only change** (`LibraryView.tsx`, `en.ts`, `styles.css`), nothing in
-`src-tauri/`, so there was nothing for the owner's machine to verify that the sandbox couldn't
-already cover; still needs a look in the real running app per the standing visual-verification
-rule, just not blocked on `cargo`.
+**Standing lesson from all three sessions, worth internalising rather than re-learning:**
+headless Chromium is not a reliable predictor for anything involving drag gestures, native form
+controls, or CSS `table-layout: fixed` in this app — it passed clean on every attempt, including
+the two that didn't work. Treat headless-green as "didn't regress anything else," never as
+confirmation a drag/native-input fix works, for this codebase specifically.
 
 **Environment note: `git` via the device bridge leaves stale `.git/*.lock` files.** Every git
-write in this session (even `git status`) warned `unable to unlink '.git/index.lock':
-Operation not permitted`, and the *next* git command then failed outright with `Unable to
-create '.git/index.lock': File exists` — the bridge's mount can create lock files but not
-delete them, so git's own cleanup silently fails and the stale lock blocks the next invocation.
-Fix that worked every time: `mv .git/index.lock .git/index.lock.stale-<ts>` (or `HEAD.lock`)
-immediately before the next git command — `mv` succeeds where `rm`/`unlink` cannot, same
-constraint as ordinary file deletes through this bridge. Recorded in this session's project
-memory (`git_device_bash.md`) so it doesn't have to be rediscovered.
-
-**Prior session's only change was documentation hygiene (B-118), not product code.**
-`docs/handover.md` had grown to 147 KB / 1840 lines and `docs/backlog.md` to 129 KB, both required
-reading in full every session. Fix: the full session-by-session narrative that used to live in
-this file is now in `docs/session-archive.md`, verbatim; several backlog items whose Notes column
-had become a multi-paragraph investigation log are now short current-state summaries in
-`docs/backlog.md`, with the full text moved to `docs/backlog-archive.md`. **Nothing was deleted —
-only relocated.** `ai/methodology.md`'s documentation system and AI context hierarchy sections were
-updated to name both archive files as read-when-needed, not every-session. See B-088 for the
-starter-kit backport of this lesson (a template should not have to discover this at 250+ KB).
+write (even `git status`) can warn `unable to unlink '.git/index.lock': Operation not permitted`,
+and the *next* git command then fails outright with `Unable to create '.git/index.lock': File
+exists` — the bridge's mount can create lock files but not delete them, so git's own cleanup
+silently fails. Fix that has worked every time: `mv .git/index.lock .git/index.lock.stale-<ts>`
+(or `HEAD.lock`) immediately before the next git command — `mv` succeeds where `rm`/`unlink`
+cannot. Recorded in project memory (`git_device_bash.md`).
 
 ## Project summary
 
@@ -147,49 +72,29 @@ no longer what the app does.
 
 ## Active work
 
-**Column reorder has now had two fix attempts (sessions 14 and 15); neither has been confirmed
-working by the owner yet.** Resize (fixed session 14) has not been re-reported as broken. Nothing
-is half-built or uncommitted. `main` is 7 commits ahead of `origin/main` — push is the owner's
-call, not yet made. **Owner needs to look at reorder specifically in the real app before this
-counts as done** — headless verification has missed this interaction twice already and should not
-be trusted alone for it a third time.
+**B-008 is fully done and owner-confirmed.** Nothing is half-built or uncommitted. `main` is 7
+commits ahead of `origin/main`, ready to push. **Next up: B-010, the composed filter panel**
+(player/event/date/result/ECO criteria, "Filter" control plus removable chips — Option C, decided
+session 10). That's also where B-033's still-unmeasured half (rendering 10k rows, <200ms filtered
+search) finally becomes testable.
 
-**Files touched this session (15):** `src/features/library/LibraryView.tsx` only (reorder's
-`mousedown`/`mousemove`/`mouseup` replaced with `pointerdown`/`pointermove`/`pointerup` +
-`setPointerCapture`, plus a `suppressNextClickRef` guard against the spurious post-drag sort
-toggle that capture introduced). Plus `docs/backlog.md` and this file. No new dependency.
+**Files touched session 16:** `src/features/library/LibraryView.tsx` only — doc-comment cleanup,
+no behaviour change (removed the inline round-by-round bug-fix narrative now that reorder is
+confirmed working; the design's current shape is still fully described, just not its history).
+Plus `docs/backlog.md`, project memory (`wkwebview_vs_headless.md` corrected), and this file.
 
-**Files touched session 14:** `src/features/library/LibraryView.tsx` only (native HTML5 DnD
-replaced with hand-rolled mouse-event dragging — later found insufficient, see session 15 above;
-explicit JS-computed pixel widths for the table and every `<col>`, replacing reliance on CSS
-`table-layout: fixed`'s own redistribution — this half held up). Plus `docs/backlog.md` and this
-file. No new dependency.
+**One design correction mid-build in session 13, worth internalising as a standing habit:** the
+first drag-to-reorder mockup put a small grip icon (⠿) on every header, the way Notion/Trello/most
+web apps do it. Checked against actual desktop precedent before building (Windows Explorer, Excel)
+rather than after — Explorer drags the header cell itself, no grip. Built the Explorer-style
+version. **The lesson, reinforced again by column visibility (milestone 2) the same session: when
+mocking anything with a real-world desktop precedent, check that precedent before showing options,
+not after the owner has to ask whether desktop conventions differ.**
 
-**Files touched session 13:** `src/features/library/LibraryView.tsx` (drag-to-reorder,
-`columnSizing`/`columnOrder` TanStack state, a `<colgroup>` driving column widths),
-`src/i18n/locales/en.ts` (`library.columnMenu.reset`), `src/styles.css` (`.col-resizer`,
-`.dragging`, `.drop-target`; removed the now-redundant `.col-elo`/`.col-date`/`.col-result`/
-`.col-eco` width rules). No new dependency — same `@tanstack/react-table` already in use since
-milestone 1.
-
-**One design correction mid-build in session 13, worth internalising as a standing habit rather
-than a one-off fix:** the first mockup for drag-to-reorder put a small grip icon (⠿) on every
-header, the way Notion/Trello/most web apps do it. Checked against the actual desktop precedent
-before building (Windows Explorer, Excel) rather than after — Explorer drags the header cell
-itself, no grip; Excel's gesture is different again (edge + Shift) and specific to spreadsheet
-semantics, not applicable here. Built the Explorer-style version. **The lesson from both milestone
-2 and this: when mocking anything with a real-world desktop precedent, check that precedent before
-showing options, not after the owner asks whether desktop conventions differ.**
-
-**Next planned work: owner review of the whole B-008 feature set in the real app again** —
-right-click a header, try dragging one, try resizing White/Black/Event, try resizing Event
-specifically (both growing and shrinking), try Reset columns — **then push, then B-010's Option C
-filter panel** (a "Filter" control opening composed player/event/date/result/ECO criteria, active
-filters shown as removable chips — decided in session 10). That's also where the still-unmeasured
-half of B-033 (rendering 10k rows, <200ms filtered search) finally becomes testable. Mock any
-further layout change before coding it (AGENTS.md's mandatory rule) — and check real-world
-precedent (web vs. desktop, or whatever's relevant) as part of that mock, not as a follow-up
-question the owner has to ask.
+**Before starting B-010:** mock the layout first (AGENTS.md's mandatory rule — two or more
+genuinely different options, screenshotted, sent to the owner) and check real-world precedent
+(web-app vs. desktop-app conventions) as part of that mock, the same way B-008's milestone 2 and
+reorder mockups were checked — not as a follow-up question the owner has to ask.
 
 ## Standing constraints
 
@@ -298,33 +203,31 @@ Neither blocks anything above; both make later work better-founded.
    session 6, more since). **Standing rule: when a symptom has an obvious culprit in our own code,
    or a plan rests on how often something happens, find the control first** — every check so far
    has been cheap. Full instance-by-instance record in `docs/session-archive.md`.
-9. **Doc bloat was a live risk and B-118 (this session) is the fix**, not a guarantee it won't
-   recur. Watch `docs/handover.md` and `docs/backlog.md` size at the end of every session; archive
-   before it reaches the point where nobody reads the whole thing.
+9. **Doc bloat was a live risk and B-118 fixed it once**, not permanently — this file grew again
+   over sessions 13–16 and got a lighter trim as part of session 16's handover. Watch
+   `docs/handover.md` and `docs/backlog.md` size at the end of every session; archive before it
+   reaches the point where nobody reads the whole thing.
 
 ## Next actions
 
-1. **Owner: look at reorder specifically in the real running app** — it's had two fix attempts
-   without confirmation either worked. Drag a header to reorder; also click a header with no drag
-   movement afterward to confirm sort still toggles normally, and click a header you just dragged
-   *away from* to confirm it doesn't have a stuck/wrong sort state (the click-suppression bug
-   session 15 caught and fixed before shipping). If reorder still doesn't work, the most useful
-   report is not just "still broken" but *what happens*: does the cursor change, does anything
-   highlight/move at all, does it work with a mouse but not a trackpad (or vice versa) — headless
-   testing has been an unreliable predictor for this one interaction twice running. Once reorder
-   is confirmed, also re-check resize/Reset columns (paused this session, not re-tested), then
-   push — `main` is 7 commits ahead of `origin/main`.
-2. **B-085's settings-storage decision still needs making before any of this persists** across a
-   relaunch — order/visibility/width are all session-only right now, same as sort always was.
-   Not urgent; nothing is blocked on it, the interaction already works without it.
-3. **B-010 — the Option C composed filter panel.** Where B-033's remaining half (10k-row render,
-   <200ms filtered search) finally becomes measurable. Mock the layout before coding it, and
-   check real-world precedent (web-app vs. desktop-app conventions, same as B-008's two rounds)
-   as part of building that mock rather than after presenting it.
-4. Then `docs/architecture.md` (the remaining half of B-055).
-5. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
+1. **B-010 — the Option C composed filter panel.** Player/event/date/result/ECO criteria, a
+   "Filter" control plus removable chips. Where B-033's remaining half (10k-row render, <200ms
+   filtered search) finally becomes measurable. Mock the layout before coding it (two or more
+   genuinely different options, screenshotted), and check real-world precedent (web-app vs.
+   desktop-app conventions, same as B-008's milestone 2 and reorder) as part of that mock rather
+   than after presenting it.
+2. **B-085's settings-storage decision still needs making before column layout persists** across a
+   relaunch — order/visibility/width are all session-only right now, same as sort always was. Not
+   urgent; nothing is blocked on it, the interaction already works without it. Worth bundling with
+   window geometry/pane sizes (B-085's original scope) rather than solving column persistence
+   alone.
+3. Then `docs/architecture.md` (the remaining half of B-055).
+4. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
    app — `src-tauri/capabilities/default.json` governs both, and a wrong permission identifier
    fails at runtime with a completely green build (see the Environment notes below).
+5. **This file has grown again since the last B-118 trim** (session ~12). Consider another
+   archive pass if it keeps growing — move settled session narrative to `docs/session-archive.md`,
+   keep this file to current-state facts only, per the standing rule at the top of this file.
 
 ## Environment & operating notes
 

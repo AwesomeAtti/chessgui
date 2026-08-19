@@ -40,65 +40,48 @@
  *
  * **Reorder, resize, default order, and reset (B-008 milestones 3, 6, 5, 4) all landed together**
  * (session 13), because the owner asked for them as one pass rather than one PR per item.
- * Surveyed the same way milestone 2 was, and corrected once during that survey: the first mockup
- * put a Notion/Trello-style grip icon on every header as the drag handle, which turned out to be
- * a web-app habit, not a desktop one — asked, checked, and confirmed against Windows Explorer and
- * Excel. Explorer's own convention is dragging the header cell itself (no grip), which is what's
- * built here (draggable lives on `.th-sort`, not a separate handle). Column resizing follows the
- * same "no new dependency" line as milestones 1–2 — TanStack's built-in `columnSizing` state, a
- * `.col-resizer` strip at each resizable header's trailing edge. `Elo` (both), `Result`, `Date`,
- * and `ECO` are locked (`enableResizing: false`, `size === minSize === maxSize`) per the owner's
- * request — short, fixed-format tokens that never need to flex; `White`, `Black`, and `Event` stay
- * resizable within a min/max range, since free text genuinely varies in how much room it needs.
- * Every column's default `size` is sized generously enough that its own header label never
- * truncates (checked headlessly, not eyeballed — see the verification note in the B-008 backlog
- * entry). **Reordering has no keyboard-accessible alternative** — plain HTML5 drag-and-drop has
- * none, and the owner explicitly chose to skip building one (Explorer's own fallback is a
- * Move-Up/Move-Down button pair in its column chooser) rather than add it this pass. Worth
- * revisiting if it turns out to matter.
+ * Surveyed the same way milestone 2 was: dragging lives on the header cell itself (`.th-sort`),
+ * not a separate grip icon — matches Windows Explorer, not the web-app grip-icon habit (Notion,
+ * Trello). Column resizing is TanStack's built-in `columnSizing` state, a `.col-resizer` strip at
+ * each resizable header's trailing edge. `Elo` (both), `Result`, `Date`, and `ECO` are locked
+ * (`enableResizing: false`, `size === minSize === maxSize`) per the owner's request — short,
+ * fixed-format tokens that never need to flex; `White`, `Black`, and `Event` stay resizable within
+ * a min/max range, since free text genuinely varies in how much room it needs. Every column's
+ * default `size` is sized generously enough that its own header label never truncates (checked
+ * headlessly, not eyeballed — see the verification note in the B-008 backlog entry). **Reordering
+ * has no keyboard-accessible alternative and only minimal drag/drop-target visual feedback** — both
+ * by the owner's explicit choice, worth revisiting in a later release rather than this pass.
  *
- * **Two bugs found on the owner's own machine (session 14), neither visible in the sandbox's
- * headless Chromium.** Resizing was fixed in one round; reordering took two — the session-14 fix
- * (hand-rolled mouse events) still didn't work on the owner's machine, and needed a session-15
- * follow-up (Pointer Events with explicit capture, see below) once headless verification alone
- * had already been shown not to be trustworthy for this interaction.
+ * **Column reordering is Pointer Events (`pointerdown`/`pointermove`/`pointerup`), not HTML5
+ * drag-and-drop, and not plain Mouse Events either — both were tried and both failed on the
+ * owner's real WKWebView app despite passing the sandbox's headless-Chromium verification** (full
+ * history in `docs/session-archive.md`, sessions 14–15; the short version: this app's own
+ * Tauri-native drag-drop for PGN import conflicts with HTML5 `draggable`, and WebKit's native
+ * form controls — `.th-sort` is a `<button>` — implicitly capture the pointer on press in a way
+ * plain Mouse Events don't survive). `setPointerCapture` on `pointerdown` (see `onPointerDown`
+ * below) is what makes the drag reliable; it has a side effect (the browser's compatibility
+ * `click` still fires on the drag's *origin* header afterward) that's suppressed via
+ * `suppressNextClickRef` rather than `preventDefault()` — see that ref's own comment for why.
+ * **Lesson worth keeping: headless-Chromium passing is not sufficient evidence for anything
+ * drag-based in this app** — it missed real breakage twice in a row here.
  *
- * 1. **Reordering didn't work at all (two rounds).** Built on native HTML5 drag-and-drop
- *    originally, which worked in headless Chromium (Playwright's synthetic input goes through
- *    Chromium's own input pipeline, which still runs the browser's native DnD state machine) but
- *    not in the real app's WKWebView — likely because this app already registers Tauri's own
- *    window-level native drag-and-drop for PGN file imports (`ImportDialog`'s Files tab, and the
- *    paste/drop listener in `App.tsx`), and disabling Tauri's drag-drop isn't an option since
- *    file-drop import depends on it. Round one (session 14): dropped HTML5 DnD entirely and
- *    hand-rolled it from `mousedown`/`mousemove`/`mouseup` instead — verified working headlessly,
- *    but the owner reported it **still** didn't work in the real app. Round two (session 15): the
- *    remaining culprit was `.th-sort` being a real `<button>` element — WebKit's native form
- *    controls implicitly capture the pointer on press, which can suppress `mousemove` dispatch to
- *    `window` entirely while the button stays down (headless Chromium doesn't reproduce this;
- *    resize never hit it either, because `.col-resizer` is a plain `<div>`, not a form control).
- *    Fixed by switching from Mouse Events to Pointer Events with explicit
- *    `setPointerCapture`/`pointercancel` handling (see the window-level effect and the
- *    `onPointerDown` handler below for the full reasoning, including why `preventDefault()` is
- *    deliberately *not* called there).
- * 2. **Resizing one column moved locked ones too.** A `<table style="table-layout: fixed">` whose
- *    `<colgroup>` gives every column an explicit width, and whose own resolved width (`100%`)
- *    doesn't equal the sum of those widths, is required by the CSS table-layout algorithm to
- *    distribute the difference across *every* column, evenly — locked columns included, since
- *    "locked" isn't a concept CSS tables have. Fixed by giving the `<table>` itself an explicit
- *    pixel width computed in JS (`tableWidth`, the sum of every visible column's rendered width)
- *    instead of `100%`, and giving every `<col>` — `event` included — an explicit pixel width too,
- *    so there is never any slack left for the browser to redistribute. `event` is the designated
- *    fill column: a `ResizeObserver` on the scroll container feeds a live `containerWidth`, and
- *    `event`'s width is `containerWidth` minus every other visible column's width
- *    (`eventFillWidth`) as long as the owner hasn't resized it directly. Once the owner drags
- *    `event`'s own resize handle (`eventManuallyResized` flips true), its width becomes
- *    `max(the size they dragged to, eventFillWidth)` — respecting their chosen minimum while still
- *    growing to fill extra room — via a dedicated hand-rolled resize handler
- *    (`eventResizeRef`/`EVENT_MIN_SIZE`/`EVENT_MAX_SIZE`) rather than TanStack's built-in
- *    `header.getResizeHandler()`, because that handler's drag-delta math starts from the column's
- *    internal `columnDef.size` rather than its actual auto-filled rendered width and so couldn't
- *    grow it correctly. Every other column — locked or not — renders at exactly the pixel width
- *    its own state says, full stop; "Reset columns" also resets `eventManuallyResized`.
+ * **Column widths are computed in JS, not left to the browser's own fixed-table-layout algorithm**
+ * (also sessions 14–15). A `<table style="table-layout: fixed">` whose `<colgroup>` widths don't
+ * sum to the table's own resolved width is redistributed by the browser across *every* column —
+ * "locked" isn't a concept CSS tables have, so a naive version of this let resizing one column
+ * visibly move others that were supposed to be fixed. Fixed by giving the `<table>` itself an
+ * explicit pixel width (`tableWidth`, computed below) instead of `100%`, and giving every
+ * `<col>` — `event` included — an explicit pixel width too, so there's never slack left to
+ * redistribute. `event` is the designated fill column: a `ResizeObserver` on the scroll container
+ * feeds a live `containerWidth`, and `event`'s width is `containerWidth` minus every other
+ * visible column's width (`eventFillWidth`) as long as the owner hasn't resized it directly. Once
+ * the owner drags `event`'s own resize handle (`eventManuallyResized` flips true), its width
+ * becomes `max(the size they dragged to, eventFillWidth)` — respecting their chosen minimum while
+ * still growing to fill extra room — via a dedicated hand-rolled resize handler
+ * (`eventResizeRef`/`EVENT_MIN_SIZE`/`EVENT_MAX_SIZE`) rather than TanStack's built-in
+ * `header.getResizeHandler()`, whose drag-delta math starts from the column's internal
+ * `columnDef.size` rather than its actual auto-filled rendered width. "Reset columns" also resets
+ * `eventManuallyResized`.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -228,10 +211,9 @@ export function LibraryView({
   // comment) — the menu always lists every hideable column, not just the one under the cursor.
   const [columnMenuAt, setColumnMenuAt] = useState<{ x: number; y: number } | null>(null);
   const columnMenuRef = useRef<HTMLDivElement | null>(null);
-  // Drag-to-reorder (session 13, hand-rolled from mouse events since session 14, switched to
-  // Pointer Events since session 15 — see the file doc comment on why neither HTML5 DnD nor plain
-  // mouse events survive the real app). `draggedColumnId`/`dropTargetId`
-  // are state purely so the dragged/hovered headers can be styled; the drag's actual live state
+  // Drag-to-reorder, hand-rolled from Pointer Events (see the file doc comment for why).
+  // `draggedColumnId`/`dropTargetId` are state purely so the dragged/hovered headers can be
+  // styled; the drag's actual live state
   // (which column, whether the movement threshold has been crossed yet, which header is under
   // the cursor right now) lives in `dragRef` instead, read fresh by the window-level listeners
   // registered once below — using state there would mean re-subscribing those listeners on every
@@ -433,23 +415,11 @@ export function LibraryView({
 
   allLeafColumnIdsRef.current = table.getAllLeafColumns().map((c) => c.id);
 
-  // Drag-to-reorder's actual mechanics (session 14, revised session 15 — see the file doc
-  // comment). Registered once, on mount: `pointerdown` on a header (below) just seeds `dragRef`,
-  // and everything else happens here so a drag can continue even if the cursor leaves the header
-  // that started it. A 4px movement threshold is what keeps an ordinary sort click from ever
-  // being treated as a drag — native HTML5 DnD used to give this distinction for free;
-  // hand-rolling it means rebuilding it.
-  //
-  // Pointer Events, not mouse events (session 15): plain `mousedown`/`mousemove`/`mouseup` on a
-  // `<button>` reordered correctly in the sandbox's headless Chromium but still didn't move a
-  // single column in the owner's real WKWebView app. The mechanism headless Chromium can't
-  // reproduce: WebKit's native form controls (a `<button>` is one) implicitly capture the pointer
-  // on mousedown, which can suppress `mousemove` dispatch to `window` entirely while the button
-  // stays pressed — resize never hit this because its handle is a plain `<div>`, not a form
-  // control. Explicit `setPointerCapture` on `pointerdown` is the standard fix: it overrides
-  // whatever implicit capture the browser would otherwise apply, and captured pointer events still
-  // bubble to `window` exactly like uncaptured ones do, so the rest of this drag logic is
-  // unchanged.
+  // Drag-to-reorder's actual mechanics (see the file doc comment for why this is Pointer Events,
+  // not HTML5 DnD or plain Mouse Events). Registered once, on mount: `pointerdown` on a header
+  // (below) just seeds `dragRef`, and everything else happens here so a drag can continue even if
+  // the cursor leaves the header that started it. A 4px movement threshold is what keeps an
+  // ordinary sort click from ever being treated as a drag.
   useEffect(() => {
     const onMove = (event: PointerEvent) => {
       const drag = dragRef.current;
@@ -704,13 +674,12 @@ export function LibraryView({
                           aria-label={t("library.sortToggle", {
                             column: header.column.columnDef.header as string,
                           })}
-                          // Drag-to-reorder (session 13; hand-rolled from mouse events since
-                          // session 14, switched to Pointer Events with explicit capture in
-                          // session 15 — see the file doc comment and the note above the
-                          // window-level effect for why). Lives on the header's own click target
-                          // rather than a separate grip icon — matches Explorer/Outlook, not the
-                          // web-app grip-icon habit. This only *starts* the drag; the window-level
-                          // `pointermove`/`pointerup` listeners above do the rest, including the
+                          // Drag-to-reorder — see the file doc comment and the note above the
+                          // window-level effect for why this is Pointer Events with explicit
+                          // capture. Lives on the header's own click target rather than a separate
+                          // grip icon — matches Explorer/Outlook, not the web-app grip-icon habit.
+                          // This only *starts* the drag; the window-level `pointermove`/
+                          // `pointerup` listeners above do the rest, including the
                           // movement threshold that keeps an ordinary sort click from ever being
                           // mistaken for one. No `preventDefault` here deliberately — calling it
                           // on `pointerdown` would suppress the compatibility `click` event this
