@@ -245,6 +245,76 @@ products *choose to* do. Sort-by-header-click stays well supported on its own (t
 genuinely a table, unlike Linear's issue list), but composed filtering should not live in the
 headers.
 
+### Widening again, past developer tools: what "modern" actually points at (B-010, session 17)
+
+> The two passes above stopped at chess products, GitHub, Linear and Notion. The owner then
+> defined "modern" for this project — desktop-app patterns, familiar from **popular apps in other
+> categories that face similar UI challenges: games, social media, utilities** — and that standard
+> is not met by the sample above. GitHub, Linear and Notion are developer workflow tools: the
+> reference class nearest to hand for anyone building software, and therefore the one most likely
+> to be reached for without noticing. Reaching for it is the same error as surveying only chess
+> apps. This pass covers the categories actually named, using each product's own documentation.
+
+**macOS Finder — Smart Folders** (utility). Criteria are rows, added with a `+` button below the
+search field. The attribute pop-up carries the common ones and ends in **"Other"**, which opens
+the complete searchable attribute list (~250 of them). The searchable list is the scaling
+mechanism: the menu grows, the window does not.
+
+**Apple Music / iTunes — Smart Playlists** (utility, media). Each rule is attribute + operator +
+value, with `+`/`-` per rule. Two details worth stealing: the **match any/all pop-up appears only
+once there is more than one rule** — with one rule the question is meaningless and the control is
+noise — and rules **nest** via Option-clicking the Nest button, for "highly rated rock released
+before 1990 or after 2000".
+
+**Adobe Lightroom Classic — Smart Collections** (media). The same criterion-row shape over
+**70+ attributes** (Rating, Capture Date, Camera, Lens, ISO, GPS, Keywords, Megapixels…). At that
+count a fixed form is not a design choice, it is impossible — which is the clearest evidence that
+this project's first B-010 mockup was the wrong shape rather than merely a dense one.
+
+**Adobe Lightroom Classic — the Library Filter bar** (media). A *different* pattern for a
+different job, and one none of B-010's options serve: three modes — Text, Attribute, Metadata —
+where **Metadata is a faceted column browser** of up to eight columns (Date, Camera, Lens), each
+listing the values actually present, multi-selectable, ANDed across modes. This answers "what is
+*in* this collection?" rather than "show me the ones matching this query". The chess equivalent —
+"which events and openings are in this database?" — is a real workflow and is **deferred to
+B-021**, recorded here so it is a decision rather than an oversight.
+
+**Steam — dynamic collections** (games). Six checkbox facet categories (Players, Play State,
+Genre, Store Tags, Hardware Support, Features), plus **typeahead autocomplete on the one
+high-cardinality facet**, Store Tags, because there are hundreds. Same lesson as Finder's
+"Other": small sets get a list, large sets get a search box.
+
+**Discord — search** (social/chat). A filter menu *and* `from:` / `in:` / `has:` / `mentions:`
+typed shortcuts. Two paths to the same filters; the typed one is an accelerator, never the only
+path.
+
+**Gmail — search chips** (utility). Chips appear *below* the search box after a search, and
+Google's stated rationale is that users should not need operator syntax like `from:` to narrow
+results.
+
+**Conclusion, and it overturned this document's own working assumption.** Everything that composes
+filters over a large personal collection with many attributes does it in **criterion rows**, and
+everything that shows *applied* filters does it as **chips or tokens**. Those are two different
+surfaces doing two different jobs, and conflating them is easy: an inline pill bar was
+recommended here first and would have had to grow a composer anyway. Typed syntax is universally
+secondary. So B-010 is Option C's placement (a filter bar, never column headers — unchanged) with
+a **criterion-row builder for authoring and chips for applied state**, adopting Music's
+progressive all/any. Nesting and OR-grouping stay out of the MVP; they are B-021.
+
+Sources for this pass: [Finder Smart
+Folders](https://support.apple.com/guide/mac-help/create-or-change-a-smart-folder-on-mac-mchlp2804/mac),
+[Music Smart
+Playlists](https://support.apple.com/guide/music/create-edit-and-delete-smart-playlists-mus1712973f4/mac),
+[Lightroom Smart Collection
+criteria](https://helpx.adobe.com/lightroom-classic/desktop/organize-photos-in-lightroom-classic/smart-collections-criteria-in-lightroom-classic.html),
+[Lightroom Library Filter
+bar](https://helpx.adobe.com/lightroom-classic/help/finding-photos-catalog.html), [Steam dynamic
+collections](https://www.thegamer.com/steam-how-to-sort-your-games-into-genres-and-tags/),
+[Discord search](https://support.discord.com/hc/en-us/articles/115000468588-How-to-Use-Search-on-Discord),
+[Gmail search chips](https://workspaceupdates.googleblog.com/2020/02/gmail-search-chips-ga.html).
+GitLab's design system documents a "filtered search token" pattern but its own page leaves the
+mechanics as TODO, so it is recorded as unconfirmed rather than cited as support.
+
 ## Sources
 
 - [Board window — ChessBase 18](https://help.chessbase.com/CBase/18/Eng/board_window.htm)
