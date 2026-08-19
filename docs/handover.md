@@ -17,7 +17,7 @@ survey that overturned the AI's own recommendation.** Also settled this session:
 definition of "modern" is now written down (`docs/ui-survey.md` session-17 section and project
 memory), which closes the long-standing "modern is an adjective, not a spec" risk, and the
 TanStack v8 pin is a deliberate documented judgment call rather than an inherited one. `main` is
-pushed and level with `origin/main` as of commit `223ce97`; **session 17's work is uncommitted**.
+committed and pushed; the working tree is clean.
 
 **Previously:** **B-008 is done — all six milestones built, and confirmed working by the
 owner in the real app**, including column reorder, which took three attempts across sessions
@@ -82,7 +82,7 @@ no longer what the app does.
 
 ## Active work
 
-**B-010 is done and owner-confirmed, but uncommitted.** Full detail in the B-010 backlog row;
+**B-010 is done, owner-confirmed, committed and pushed.** Full detail in the B-010 backlog row;
 the short version is a pure `filters.ts` model (28 unit tests) plus `FilterPanel` (authoring),
 `FilterChips` (applied state) and `filterLabels` (shared catalogue keys), with the criteria owned
 by `App.tsx` rather than `LibraryView` because that view unmounts on every game-tab switch.
@@ -100,10 +100,11 @@ session. See project memory `wkwebview_vs_headless.md`.
 **Still outstanding for the MVP core:** B-033's remaining half (10k-row render, <200ms filtered
 search), now finally testable and never yet measured.
 
-**`_to_delete/` exists at the repo root and should be deleted by hand.** It holds the throwaway
-visual-verification harness (`_preview.tsx`, `preview.html`, `vite.preview.config.ts`,
-`dist-preview/`). It is a folder rather than a deletion because the AI reaches this repo through
-a mount that cannot unlink — see the environment note below.
+**Standing rule added session 17: do not record commit or push state in this file.** It goes
+stale within minutes and `git status` is authoritative. This file carried "`main` is 7 commits
+ahead of `origin/main`" across several sessions after those commits had in fact been pushed, and
+then immediately repeated the mistake by committing a line asserting that session 17's own work
+was uncommitted — while committing it. Say what was *built*, not what was *committed*.
 
 **Files touched session 17:** new
 `src/features/library/{filters.ts,filters.test.ts,FilterPanel.tsx,FilterChips.tsx,filterLabels.ts}`;
@@ -210,8 +211,12 @@ Neither blocks anything above; both make later work better-founded.
 1. **WebKitGTK on Linux remains unverified.** B-048's spike ran on macOS/WKWebView only. Blocked
    on B-070 (testers); tracked as B-066. Tauri reportedly moving toward a Chromium-based Linux
    webview — treat as upside, not plan.
-2. **"Modern" is still an adjective, not a spec.** B-024 (design system) sits at P2, scheduling
-   the vision's central claim last.
+2. **"Modern" is now a spec, but an unapplied one.** The owner defined it in session 17 —
+   desktop-app patterns, latest stable libraries, familiar from popular apps *outside* the chess
+   category (games, social media, utilities), with developer tools explicitly not counting as a
+   substitute. Written up in `docs/ui-survey.md` and project memory; B-010 is the first feature
+   designed against it. The residual risk is narrower than it was: B-024 (design system) still
+   sits at P2, so the standard exists but nothing systematically applies it.
 3. **Bus factor of one across the chess stack.** Niklas Fiekas maintains shakmaty, pgn-reader,
    chessops, chessground, and fishnet. Mitigated by all of it being GPL, open, and small enough to
    fork if needed.
@@ -219,8 +224,9 @@ Neither blocks anything above; both make later work better-founded.
    MVP, since only `chessops` walks moves (at display time, one game at a time; the importer
    doesn't walk moves at all under ADR-0009). Wakes up, smaller, at the position index
    (B-018/B-042) and engine analysis (B-019).
-5. **Cross-platform release is gated on testers, and testers were never recruited** (B-070). The
-   architecture supports Windows/Linux; nothing verifies them. Likely to be discovered late
+5. **Cross-platform release is gated on testers, and testers were never recruited** (B-070).
+   **Now live rather than looming: session 17 built the installers, so the gap is no longer
+   hypothetical.** The architecture supports Windows/Linux; nothing verifies them. Likely to be discovered late
    because it looks like a release task and is actually a recruiting one with a long lead time.
    Mitigations in place: 3-OS CI from commit one (B-046), headless smoke tests (B-071), portability
    guardrails (B-069).
@@ -243,24 +249,26 @@ Neither blocks anything above; both make later work better-founded.
 
 ## Next actions
 
-1. **Commit session 17's work** — it is verified and owner-confirmed but still uncommitted.
-   Two commits: the survey (`docs/ui-survey.md`) stands on its own, then the feature and the
-   remaining docs. Never `git add -A`: `_to_delete/` and any `.fuse_hidden*` orphans are sitting
-   in the tree and this repo is public.
-2. **B-033's remaining half, now testable** — 10k rows rendered, <200ms filtered search. This is
-   the only MVP performance claim never measured, and the project's own risk register says every
-   measured assumption so far turned out misjudged.
-3. **Delete `_to_delete/`** (see Active work).
-2. **B-085's settings-storage decision still needs making before column layout persists** across a
+1. **B-070 — recruit Windows and Linux testers.** Raised to P0 in session 17, because B-032 now
+   produces installers for both and there is nobody to run them. This stopped being a code task
+   and became the critical path, and it is a recruiting job with a long lead time wearing a
+   release job's clothes — which is precisely the shape risk 5 below predicted.
+2. **B-033's remaining half, still not measured** — 10k rows rendered, <200ms filtered search.
+   The only MVP performance claim never checked, and measurable on one machine without any
+   testers; do not let it wait behind B-070.
+3. **Signing** (B-032's expensive half) — unsigned macOS builds report as "damaged", which reads
+   as a corrupt download rather than a policy block, so the first tester report will be a bug
+   that isn't one. Whatever ships to testers needs install instructions alongside it.
+4. **B-085's settings-storage decision still needs making before column layout persists** across a
    relaunch — order/visibility/width are all session-only right now, same as sort always was. Not
    urgent; nothing is blocked on it, the interaction already works without it. Worth bundling with
    window geometry/pane sizes (B-085's original scope) rather than solving column persistence
    alone.
-3. Then `docs/architecture.md` (the remaining half of B-055).
-4. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
+5. Then `docs/architecture.md` (the remaining half of B-055).
+6. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
    app — `src-tauri/capabilities/default.json` governs both, and a wrong permission identifier
    fails at runtime with a completely green build (see the Environment notes below).
-5. **This file has grown again since the last B-118 trim** (session ~12). Consider another
+7. **This file has grown again since the last B-118 trim** (session ~12). Consider another
    archive pass if it keeps growing — move settled session narrative to `docs/session-archive.md`,
    keep this file to current-state facts only, per the standing rule at the top of this file.
 
