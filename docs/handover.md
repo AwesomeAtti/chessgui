@@ -6,18 +6,17 @@
 > `docs/session-archive.md`, not here (see B-118). If an entry below would take more than a
 > few sentences to justify, put the reasoning in the archive and link to it.
 
-**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 11, B-008 milestone 2) ·
+**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 12) ·
 **Kit version:** 0.2.0
 
 **State in one line:** **B-008 milestone 2 (column visibility) is built, verified in the AI
-sandbox (typecheck/check:i18n/build, headless-Playwright), and committed locally as `8079f2e`
-on `main` — one commit ahead of `origin/main`, not pushed** (this session didn't push; that's
-still the owner's call, per B-031's open question about repo-public timing). **Not yet looked at
-by the owner on their own machine** — visual work isn't verified until a human has, and nothing
-here has run `cargo test`/`clippy` or a real `npm run tauri dev` session since session 10's B-011
-pass; this change happens to touch nothing in `src-tauri/`, but the rule is about looking at the
-UI, not about Rust. Next up: owner review of milestone 2 (and push, once satisfied), then B-010's
-filter panel (Option C).
+sandbox (typecheck/check:i18n/build, headless-Playwright), and committed locally — `main` is 3
+commits ahead of `origin/main`, none pushed** (still the owner's call, per B-031's open question
+about repo-public timing). **Not yet looked at by the owner on their own machine** — visual work
+isn't verified until a human has. **Session 12 added no code**, only backlog entries: four more
+`LibraryView` column features (drag-to-reorder, reset, default-order change, per-column min/max
+width), explicitly held back rather than built — the owner wants them batched into one pass
+rather than shipped one at a time. See "Next actions" below.
 
 **This session: B-008 milestone 2 (column visibility), including a revised design decision.**
 Right-click any header now opens a checklist of hideable columns (TanStack's built-in
@@ -213,13 +212,26 @@ Neither blocks anything above; both make later work better-founded.
 
 ## Next actions
 
-1. **Owner: look at B-008 milestone 2 (column visibility) in the real running app**, and push
-   `8079f2e` once satisfied — milestone 1's commits are already on `origin/main`; this is the
-   only unpushed one. Right-click any table header to open it.
-2. **B-010 — the Option C composed filter panel.** Where B-033's remaining half (10k-row render,
+1. **Owner: look at B-008 milestone 2 (column visibility) in the real running app**, and push —
+   `main` is now 3 commits ahead of `origin/main` (`8079f2e`, plus two docs-only commits from
+   this session's follow-up). Right-click any table header to open it.
+2. **Four more `LibraryView` column features, requested after using milestone 2, logged against
+   B-008/B-085 but explicitly held back rather than built (session 12):** drag-to-reorder columns,
+   a "Reset columns" action, changing the shipped default order (Date first), and per-column
+   min/max width (e.g. locking Elo to its ~4-character content). **The owner's own reasoning for
+   holding them: "if we change list view behaviour I want to address multiple requirements at
+   once"** — batch these four together as one pass over `LibraryView.tsx` rather than one PR per
+   item, since the trivial one (default order) touches the same column array the other three
+   restructure anyway. Full detail and sizing in the B-008 backlog row. Doing this batch is the
+   natural next session, ahead of B-010, since it's the same feature area already open.
+3. **B-085's settings-storage decision needs making before persistence lands** (order/visibility/
+   widths surviving a relaunch) — not before the interaction itself ships. Sort and visibility
+   already work as session-only state; reorder/resize/reset can do the same at first and gain
+   persistence once B-085 is decided, rather than blocking milestone 3-6 on it.
+4. **B-010 — the Option C composed filter panel.** Where B-033's remaining half (10k-row render,
    <200ms filtered search) finally becomes measurable. Mock the layout before coding it.
-3. Then `docs/architecture.md` (the remaining half of B-055).
-4. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
+5. Then `docs/architecture.md` (the remaining half of B-055).
+6. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
    app — `src-tauri/capabilities/default.json` governs both, and a wrong permission identifier
    fails at runtime with a completely green build (see the Environment notes below).
 
