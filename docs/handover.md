@@ -6,27 +6,50 @@
 > `docs/session-archive.md`, not here (see B-118). If an entry below would take more than a
 > few sentences to justify, put the reasoning in the archive and link to it.
 
-**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 10, B-008 milestone 1) ·
+**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 11, B-008 milestone 2) ·
 **Kit version:** 0.2.0
 
-**State in one line:** **B-008 milestone 1 (sort) is built, fully verified on the owner's own
-machine (including `cargo test`/`clippy`, which the sandbox can't run), and ready to commit.**
-B-007 and B-011 remain done/verified/pushed. Next up after the commit: B-008's column-visibility
-milestone and B-010's filter panel (Option C).
+**State in one line:** **B-008 milestone 2 (column visibility) is built, verified in the AI
+sandbox (typecheck/check:i18n/build, headless-Playwright), and committed locally as `8079f2e`
+on `main` — one commit ahead of `origin/main`, not pushed** (this session didn't push; that's
+still the owner's call, per B-031's open question about repo-public timing). **Not yet looked at
+by the owner on their own machine** — visual work isn't verified until a human has, and nothing
+here has run `cargo test`/`clippy` or a real `npm run tauri dev` session since session 10's B-011
+pass; this change happens to touch nothing in `src-tauri/`, but the rule is about looking at the
+UI, not about Rust. Next up: owner review of milestone 2 (and push, once satisfied), then B-010's
+filter panel (Option C).
 
-**This session: research (sort/filter UX survey, widened past chess into general apps) and
-B-008 milestone 1 (sort).** `docs/ui-survey.md` gained a new section comparing where sort/filter
-controls live across Scid, ChessBase, GitHub Issues, Linear, and general enterprise table-UX
-guidance — conclusion: sort-by-header-click is universal, but filtering belongs in a filter bar
-plus a composed panel with chip-rendered active filters (**Option C**), never in the column
-headers. The owner picked Option C for B-010. `LibraryView` now sorts via `@tanstack/react-table`
-(pinned to the ^8.21.3 line, not the newer v9 — see "Standing constraints" and the B-008 backlog
-entry for why); filtering, column selection, and the Option C panel are still ahead. Verified
-twice: first in a cloned copy of this repo in the AI sandbox (typecheck/test/check:i18n/build,
-plus a headless-Playwright screenshot of unsorted/asc/desc states against fabricated data), then
-for real on the owner's own machine — `npm install`, the full frontend chain, `cargo test`,
-`cargo clippy --all-targets -- -D warnings`, and `npm run tauri dev` against the real 3,412-game
-set, all green. Two commits are staged and ready (see "Next actions"); neither has been made yet.
+**This session: B-008 milestone 2 (column visibility), including a revised design decision.**
+Right-click any header now opens a checklist of hideable columns (TanStack's built-in
+`columnVisibility` state, no new dependency); `White`/`Black`/`Result` are locked visible
+(`enableHiding: false`), which doubles as the guarantee that a header is always right-clickable
+even with everything optional hidden — no separate "more columns" affordance needed. **Mocked
+three structurally different options first**, per AGENTS.md's mandatory rule (toolbar button,
+table-corner icon, right-click header) as an HTML/CSS mockup, screenshotted headlessly, sent to
+the owner. **The owner's first answer picked the toolbar button** — the pattern every web-app
+source converges on (MUI X, TanStack's own docs, shadcn, GitHub Issues, Linear, Notion) — but
+then asked whether being a desktop app changes the answer. It does: Windows Explorer, Outlook,
+and desktop-style enterprise grids (AG Grid, DevExpress) all converge on right-click-the-header
+instead, which is the actual native-desktop convention rather than a web-SaaS habit. Re-surveyed,
+re-presented, owner picked right-click. **Worth remembering for any future layout mock: ask "is
+this a web pattern or a desktop pattern" before presenting options, not after the owner has to
+ask it.** Verified via typecheck/check:i18n/build and a headless-Playwright walk: open the menu,
+hide each optional column one at a time, confirm the locked columns and the menu itself still
+work with everything else hidden, confirm Escape closes it. Committed locally as `8079f2e`, not
+pushed. **This is a frontend-only change** (`LibraryView.tsx`, `en.ts`, `styles.css`), nothing in
+`src-tauri/`, so there was nothing for the owner's machine to verify that the sandbox couldn't
+already cover; still needs a look in the real running app per the standing visual-verification
+rule, just not blocked on `cargo`.
+
+**Environment note: `git` via the device bridge leaves stale `.git/*.lock` files.** Every git
+write in this session (even `git status`) warned `unable to unlink '.git/index.lock':
+Operation not permitted`, and the *next* git command then failed outright with `Unable to
+create '.git/index.lock': File exists` — the bridge's mount can create lock files but not
+delete them, so git's own cleanup silently fails and the stale lock blocks the next invocation.
+Fix that worked every time: `mv .git/index.lock .git/index.lock.stale-<ts>` (or `HEAD.lock`)
+immediately before the next git command — `mv` succeeds where `rm`/`unlink` cannot, same
+constraint as ordinary file deletes through this bridge. Recorded in this session's project
+memory (`git_device_bash.md`) so it doesn't have to be rediscovered.
 
 **Prior session's only change was documentation hygiene (B-118), not product code.**
 `docs/handover.md` had grown to 147 KB / 1840 lines and `docs/backlog.md` to 129 KB, both required
@@ -57,33 +80,25 @@ no longer what the app does.
 
 ## Active work
 
-**B-008 milestone 1 (sort) is built, verified end-to-end on the owner's machine, and staged as
-two commits not yet made.** Nothing else is half-built: B-007 and B-011 remain done, verified,
-committed, and pushed to `origin/main` as of `c923321`.
+**B-008 milestones 1 (sort) and 2 (column visibility) are both built and committed locally.**
+Nothing is half-built or uncommitted. `main` is one commit (`8079f2e`) ahead of `origin/main` —
+push is the owner's call, not yet made this session.
 
-**Files touched this session, currently uncommitted:**
-`src/features/library/LibraryView.tsx` (TanStack Table wiring — sort only, filtering/rendering
-logic otherwise unchanged), `src/i18n/locales/en.ts` (`library.sortToggle`, one new catalogue
-key), `src/styles.css` (`.th-sort` header-button styling), `package.json` /
-`package-lock.json` (`@tanstack/react-table` ^8.21.3 added), `docs/backlog.md`, `docs/handover.md`
-(this file), and `docs/ui-survey.md`.
+**Files touched this session:** `src/features/library/LibraryView.tsx` (right-click header →
+column-visibility menu, TanStack's built-in `columnVisibility` state), `src/i18n/locales/en.ts`
+(`library.columnMenu.*`, three new keys), `src/styles.css` (`.column-menu*` rules), plus
+`docs/backlog.md` and this file. No new dependency — same `@tanstack/react-table` already added
+for milestone 1.
 
-**Split into two commits, staged by concern rather than by turn:**
-1. `docs/ui-survey.md` alone — the research and the Option C decision, independent of any code.
-2. Everything else — the sort feature plus the backlog/handover entries that describe it.
-
-**If a session picks this up mid-way:** check `git log` and `git status` before assuming either
-commit landed — this handover was written in the same turn the commits were proposed, not after
-confirming they happened.
-
-**Next planned work after the commit: B-008's column-visibility milestone, then B-010's Option C
-filter panel** (a "Filter" control opening composed player/event/date/result/ECO criteria, active
-filters shown as removable chips — decided this session over per-column header filtering, which
-`docs/ui-survey.md`'s new section found no precedent for in any surveyed product, chess or
-general). That's also where the still-unmeasured half of B-033 (rendering 10k rows, <200ms
-filtered search) finally becomes testable. Mock any further layout change before coding it
-(AGENTS.md's mandatory rule) — sort and Option C's resting/open states are already mocked and
-owner-approved; column visibility is not yet.
+**Next planned work: owner review of milestone 2 in the real app, then B-010's Option C filter
+panel** (a "Filter" control opening composed player/event/date/result/ECO criteria, active
+filters shown as removable chips — decided in session 10 over per-column header filtering, which
+`docs/ui-survey.md`'s survey found no precedent for in any surveyed product, chess or general).
+That's also where the still-unmeasured half of B-033 (rendering 10k rows, <200ms filtered search)
+finally becomes testable. Mock any further layout change before coding it (AGENTS.md's mandatory
+rule, and worth re-reading this session's "revised design decision" note above before doing so —
+check whether a web-app survey and a desktop-app survey would actually agree before presenting
+options as if they do).
 
 ## Standing constraints
 
@@ -198,11 +213,13 @@ Neither blocks anything above; both make later work better-founded.
 
 ## Next actions
 
-1. **B-008 / B-010 — the real library table and search.** TanStack arrives here, and it's where
-   B-033's remaining half (10k-row render, <200ms filtered search) becomes measurable. Mock the
-   layout before coding it if the table/filter UI changes what's visible on screen.
-2. Then `docs/architecture.md` (the remaining half of B-055).
-3. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
+1. **Owner: look at B-008 milestone 2 (column visibility) in the real running app**, and push
+   `8079f2e` once satisfied — milestone 1's commits are already on `origin/main`; this is the
+   only unpushed one. Right-click any table header to open it.
+2. **B-010 — the Option C composed filter panel.** Where B-033's remaining half (10k-row render,
+   <200ms filtered search) finally becomes measurable. Mock the layout before coding it.
+3. Then `docs/architecture.md` (the remaining half of B-055).
+4. **Exercise the file picker and a drag-drop early** in whatever session next opens the running
    app — `src-tauri/capabilities/default.json` governs both, and a wrong permission identifier
    fails at runtime with a completely green build (see the Environment notes below).
 
