@@ -51,6 +51,16 @@ export const en = {
     // {{column}} arrives already translated (a column header, e.g. "Date") — this interpolates
     // a resolved phrase rather than assembling one, same precedent as `import.summary.okFiles`.
     sortToggle: "Sort by {{column}}",
+    // The column-visibility menu (B-008 milestone 2), opened by right-clicking any header —
+    // the desktop convention (Explorer, Outlook), not the web-app toolbar-button one. `white`,
+    // `elo` (both instances), `event`, `date`, `result`, and `eco` are reused from `columns`
+    // below; `whiteElo`/`blackElo` exist only here because the menu is a flat list where the
+    // shared "Elo" header text is no longer disambiguated by table position.
+    columnMenu: {
+      title: "Columns",
+      whiteElo: "Elo (White)",
+      blackElo: "Elo (Black)",
+    },
     columns: {
       white: "White",
       black: "Black",

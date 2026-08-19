@@ -23,12 +23,20 @@
  * `docs/ui-survey.md`), and virtualisation for 10k rows is B-033. The scroll container and the
  * fixed table layout are here already so neither is a restructure.
  *
- * **Sort (B-008, milestone 1) is TanStack Table, for sorting only.** Column visibility and the
- * composed filter panel are later milestones of the same backlog item; this milestone changes
- * nothing about filtering or the row markup other than routing row order through
- * `getSortedRowModel()`. `sorting` defaults to `[]`, which TanStack renders as the underlying
- * array order — identical to what this view rendered before sorting existed, so an unsorted
- * table looks and behaves exactly as it did.
+ * **Sort (B-008, milestone 1) is TanStack Table, for sorting only.** `sorting` defaults to `[]`,
+ * which TanStack renders as the underlying array order — identical to what this view rendered
+ * before sorting existed, so an unsorted table looks and behaves exactly as it did.
+ *
+ * **Column visibility (B-008, milestone 2) is right-click-on-header, not a toolbar button.**
+ * Surveyed against both web-app tables (MUI X, TanStack's own docs, GitHub Issues, Linear,
+ * Notion — all converge on a toolbar "Columns" button) and native desktop tables (Windows
+ * Explorer, Outlook, AG Grid/DevExpress-style enterprise grids — all converge on right-click the
+ * header). The owner picked the desktop convention since chessgui is a desktop app, not a web
+ * app that happens to run in a browser. `White`, `Black`, and `Result` are locked visible
+ * (`enableHiding: false`) — they're what makes a row identifiable at all, and their permanent
+ * presence is also what guarantees a header is always available to right-click even when every
+ * optional column is hidden, so there is never a need for a separate "more columns" affordance.
+ * The composed filter panel (B-010) is a later, unrelated milestone — see `docs/ui-survey.md`.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -38,6 +46,7 @@ import {
   getSortedRowModel,
   useReactTable,
   type SortingState,
+  type VisibilityState,
 } from "@tanstack/react-table";
 import { useTranslation } from "react-i18next";
 
@@ -87,8 +96,23 @@ function resultKey(result: GameSummary["result"]) {
 
 /** Sort direction glyphs. Bare glyphs, not prose — `check:i18n` only gates letters. */
 const SORT_GLYPH = { asc: "▲", desc: "▼", none: "↕" } as const;
+/** Checkbox glyphs for the column-visibility menu. Same reasoning as `SORT_GLYPH`. */
+const CHECK_GLYPH = { on: "☑", off: "☐" } as const;
 
 const columnHelper = createColumnHelper<GameSummary>();
+
+/**
+ * `whiteElo` and `blackElo` share one header label ("Elo") because their position next to
+ * `White`/`Black` disambiguates them in the table — that's out of scope here. In the
+ * column-visibility menu they're a flat list with no such positional context, so they need
+ * distinct labels there. Every other hideable column's own header text is unambiguous alone.
+ * Returns the catalogue key to look up, or null to fall back to the column's own header text.
+ */
+function columnMenuLabelKey(id: string) {
+  if (id === "whiteElo") return "library.columnMenu.whiteElo" as const;
+  if (id === "blackElo") return "library.columnMenu.blackElo" as const;
+  return null;
+}
 
 export function LibraryView({
   games,
@@ -105,6 +129,11 @@ export function LibraryView({
   const locale = i18n.language;
   const activeRow = useRef<HTMLTableRowElement | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  // Screen position only; which column was right-clicked doesn't matter (see the file doc
+  // comment) — the menu always lists every hideable column, not just the one under the cursor.
+  const [columnMenuAt, setColumnMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const columnMenuRef = useRef<HTMLDivElement | null>(null);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -124,6 +153,7 @@ export function LibraryView({
       columnHelper.accessor((game) => game.white.name, {
         id: "white",
         header: t("library.columns.white"),
+        enableHiding: false,
         cell: (info) => <span title={info.getValue()}>{info.getValue()}</span>,
       }),
       columnHelper.accessor("whiteElo", {
@@ -135,6 +165,7 @@ export function LibraryView({
       columnHelper.accessor((game) => game.black.name, {
         id: "black",
         header: t("library.columns.black"),
+        enableHiding: false,
         cell: (info) => <span title={info.getValue()}>{info.getValue()}</span>,
       }),
       columnHelper.accessor("blackElo", {
@@ -158,6 +189,7 @@ export function LibraryView({
         id: "result",
         header: t("library.columns.result"),
         meta: { className: "col-result" },
+        enableHiding: false,
         cell: (info) => t(resultKey(info.row.original.result)),
       }),
       columnHelper.accessor((game) => game.eco ?? "", {
@@ -178,8 +210,9 @@ export function LibraryView({
   const table = useReactTable({
     data: tableData,
     columns,
-    state: { sorting },
+    state: { sorting, columnVisibility },
     onSortingChange: setSorting,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
@@ -229,6 +262,45 @@ export function LibraryView({
     activeRow.current?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
 
+  // Close the column-visibility menu the same three ways any right-click desktop menu closes:
+  // Escape, a click outside it (capture phase, so it beats the row/header click that opened or
+  // would otherwise fire under it), or the window losing focus/scrolling out from under it.
+  useEffect(() => {
+    if (columnMenuAt === null) return;
+    const close = () => setColumnMenuAt(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    const onClick = (event: MouseEvent) => {
+      if (!(columnMenuRef.current?.contains(event.target as Node) ?? false)) close();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onClick, true);
+    window.addEventListener("blur", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onClick, true);
+      window.removeEventListener("blur", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [columnMenuAt]);
+
+  // Clamp the menu inside the viewport after it renders (its size isn't known until then) —
+  // right-clicking a header near the right edge would otherwise open a menu partly off-screen.
+  useEffect(() => {
+    if (columnMenuAt === null) return;
+    const el = columnMenuRef.current;
+    if (el === null) return;
+    const rect = el.getBoundingClientRect();
+    const overflowX = rect.right - window.innerWidth;
+    const overflowY = rect.bottom - window.innerHeight;
+    if (overflowX > 0) el.style.left = `${columnMenuAt.x - overflowX}px`;
+    if (overflowY > 0) el.style.top = `${columnMenuAt.y - overflowY}px`;
+  }, [columnMenuAt]);
+
+  const hideableColumns = table.getAllLeafColumns().filter((column) => column.getCanHide());
+
   return (
     <div className="library-view">
       {importReport !== null && (
@@ -254,7 +326,12 @@ export function LibraryView({
 
         <div className="table-scroll">
           <table className="game-table">
-            <thead>
+            <thead
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setColumnMenuAt({ x: event.clientX, y: event.clientY });
+              }}
+            >
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
@@ -336,6 +413,39 @@ export function LibraryView({
             ))}
         </div>
       </div>
+
+      {columnMenuAt !== null && (
+        <div
+          ref={columnMenuRef}
+          className="column-menu"
+          role="menu"
+          aria-label={t("library.columnMenu.title")}
+          style={{ left: columnMenuAt.x, top: columnMenuAt.y }}
+        >
+          <div className="column-menu-title">{t("library.columnMenu.title")}</div>
+          {hideableColumns.map((column) => {
+            const visible = column.getIsVisible();
+            const labelKey = columnMenuLabelKey(column.id);
+            const label = labelKey !== null ? t(labelKey) : (column.columnDef.header as string);
+            return (
+              <button
+                key={column.id}
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={visible}
+                className="column-menu-item"
+                onClick={() => {
+                  column.toggleVisibility();
+                  setColumnMenuAt(null);
+                }}
+              >
+                <span aria-hidden="true">{CHECK_GLYPH[visible ? "on" : "off"]}</span>
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
