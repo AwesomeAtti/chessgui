@@ -6,15 +6,26 @@
 > `docs/session-archive.md`, not here (see B-118). If an entry below would take more than a
 > few sentences to justify, put the reasoning in the archive and link to it.
 
-**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 16) ·
+**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 17) ·
 **Kit version:** 0.2.0
 
-**State in one line:** **B-008 is done — all six milestones built, and confirmed working by the
+**State in one line (session 17):** **B-010's filter feature is built and fully verified in the
+sandbox, and is waiting on the owner to look at it in the real app** — per the standing rule
+below, that means it is not done. It is a criterion-row builder (Finder/Music/Lightroom shape)
+plus applied-state chips, not the fixed form that was mocked first and not the pill bar that was
+recommended second; **both changed on evidence, and the second time the owner asked for the
+survey that overturned the AI's own recommendation.** Also settled this session: the owner's
+definition of "modern" is now written down (`docs/ui-survey.md` session-17 section and project
+memory), which closes the long-standing "modern is an adjective, not a spec" risk, and the
+TanStack v8 pin is a deliberate documented judgment call rather than an inherited one. `main` is
+pushed and level with `origin/main` as of commit `223ce97`; **session 17's work is uncommitted**.
+
+**Previously:** **B-008 is done — all six milestones built, and confirmed working by the
 owner in the real app**, including column reorder, which took three attempts across sessions
 13–15 before it actually worked on a real WKWebView (see "Sessions 13–15" below for what each
 attempt got wrong and why headless verification kept missing it). Reorder has only minimal visual
 feedback for what's being dragged and where it'll land — the owner explicitly deferred improving
-that to a later release. `main` is 7 commits ahead of `origin/main`, ready to push. Next up:
+that to a later release. (Those commits have since been pushed.) Next up:
 B-010 (composed filter panel).
 
 **Sessions 13–15, condensed (full detail in `docs/session-archive.md` and the B-008 row in
@@ -72,11 +83,28 @@ no longer what the app does.
 
 ## Active work
 
-**B-008 is fully done and owner-confirmed.** Nothing is half-built or uncommitted. `main` is 7
-commits ahead of `origin/main`, ready to push. **Next up: B-010, the composed filter panel**
-(player/event/date/result/ECO criteria, "Filter" control plus removable chips — Option C, decided
-session 10). That's also where B-033's still-unmeasured half (rendering 10k rows, <200ms filtered
-search) finally becomes testable.
+**B-010 milestones 1 and 2 are built and uncommitted.** Full detail in the B-010 backlog row;
+the short version is a pure `filters.ts` model (28 unit tests) plus `FilterPanel` (authoring),
+`FilterChips` (applied state) and `filterLabels` (shared catalogue keys), with the criteria owned
+by `App.tsx` rather than `LibraryView` because that view unmounts on every game-tab switch.
+Verified by typecheck, 114 tests, `check:i18n`, and a headless-Chromium pass driving the real
+components — **which under this project's own standing rule counts as "didn't break anything
+else", not as verification.** The owner has not looked at it yet.
+
+**Two things need doing before this can be called done:** the owner exercising it in the real
+app, and B-033's remaining half (10k-row render, <200ms filtered search), which is now finally
+testable and has never been measured.
+
+**`_to_delete/` exists at the repo root and should be deleted by hand.** It holds the throwaway
+visual-verification harness (`_preview.tsx`, `preview.html`, `vite.preview.config.ts`,
+`dist-preview/`). It is a folder rather than a deletion because the AI reaches this repo through
+a mount that cannot unlink — see the environment note below.
+
+**Files touched session 17:** new
+`src/features/library/{filters.ts,filters.test.ts,FilterPanel.tsx,FilterChips.tsx,filterLabels.ts}`;
+modified `src/App.tsx`, `src/features/library/LibraryView.tsx`, `src/i18n/format.ts`
+(`formatIsoDate`), `src/i18n/locales/en.ts` (a `library.filter` section), `src/styles.css`;
+docs `docs/ui-survey.md` (the session-17 cross-category pass), `docs/backlog.md`, this file.
 
 **Files touched session 16:** `src/features/library/LibraryView.tsx` only — doc-comment cleanup,
 no behaviour change (removed the inline round-by-round bug-fix narrative now that reorder is
@@ -210,12 +238,14 @@ Neither blocks anything above; both make later work better-founded.
 
 ## Next actions
 
-1. **B-010 — the Option C composed filter panel.** Player/event/date/result/ECO criteria, a
-   "Filter" control plus removable chips. Where B-033's remaining half (10k-row render, <200ms
-   filtered search) finally becomes measurable. Mock the layout before coding it (two or more
-   genuinely different options, screenshotted), and check real-world precedent (web-app vs.
-   desktop-app conventions, same as B-008's milestone 2 and reorder) as part of that mock rather
-   than after presenting it.
+1. **B-010 — the owner exercises the filter UI in the real app.** Everything else about it is
+   done and green; nothing else can close it. Worth trying specifically: the field picker (it is a
+   popover inside a scrolling panel, which is exactly the class of thing headless verification has
+   missed before), the date range, and whether removing the last chip restores all rows.
+2. **B-033's remaining half, now testable** — 10k rows rendered, <200ms filtered search. This is
+   the only MVP performance claim never measured, and the project's own risk register says every
+   measured assumption so far turned out misjudged.
+3. **Delete `_to_delete/`** (see Active work).
 2. **B-085's settings-storage decision still needs making before column layout persists** across a
    relaunch — order/visibility/width are all session-only right now, same as sort always was. Not
    urgent; nothing is blocked on it, the interaction already works without it. Worth bundling with
@@ -250,6 +280,17 @@ project memory — `rust_verification.md` and `visual_verification.md` — read 
 - **Full verification chain:** `npm run typecheck && npm test && npm run check:i18n && npm run
   build`, then `cargo test --manifest-path src-tauri/Cargo.toml` and `cargo clippy --all-targets
   -- -D warnings`. The Tauri crate itself only builds on the owner's machine.
+- **The AI can run that frontend chain directly on the owner's machine through the device bridge**
+  (session 17): `node`, `npm` and the installed `node_modules` are all reachable, so typecheck,
+  vitest and `check:i18n` are real runs rather than sandbox approximations. **`npm run build` is
+  the exception and it is not a code failure:** vite empties `dist/` before writing, the mount
+  cannot unlink, and the build dies with `EPERM … unlink` *after* transforming every module.
+  Build to a fresh directory (`--outDir dist-something`) to get a genuine result.
+- **Headless screenshots still work, via a two-step route** (session 17): the bridge has no
+  network so Playwright cannot be installed there, and the AI container has no `node_modules`.
+  Build a throwaway preview bundle on the owner's machine (`base: "./"`, fresh `outDir`), stage the
+  built files into the container, serve them over `python3 -m http.server` — **not `file://`,
+  which CORS-blocks ES modules** — and drive the real components with the container's Chromium.
 - **Repo is public-facing on GitHub.** No real names, usernames, email addresses, or absolute
   paths containing a home directory in any tracked file. Check `git status` before staging; never
   blind `git add -A`.

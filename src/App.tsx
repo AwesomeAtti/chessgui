@@ -28,6 +28,7 @@ import {
   type ImportReport,
 } from "@/features/library/importReport";
 import { LibraryView } from "@/features/library/LibraryView";
+import type { Criterion, MatchMode } from "@/features/library/filters";
 import { GameView } from "@/features/game/GameView";
 import type { Game, GameId, GameSummary } from "@/model/game";
 import {
@@ -66,6 +67,14 @@ export default function App() {
   const [activeGameId, setActiveGameId] = useState<GameId | null>(null);
   const [selectedId, setSelectedId] = useState<GameId | null>(null);
   const [query, setQuery] = useState("");
+  /**
+   * Composed library filters (B-010).
+   *
+   * Here rather than in `LibraryView` for the same reason `query` is: that view unmounts every
+   * time a game tab becomes active, so anything it owns is lost on the way back.
+   */
+  const [criteria, setCriteria] = useState<readonly Criterion[]>([]);
+  const [matchMode, setMatchMode] = useState<MatchMode>("all");
   const [gameTab, setGameTab] = useState("moves");
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 
@@ -344,6 +353,12 @@ export default function App() {
             onAddGames={openImport}
             importReport={importReport}
             onDismissReport={() => setImportReport(null)}
+            criteria={criteria}
+            matchMode={matchMode}
+            onFiltersChange={(next, mode) => {
+              setCriteria(next);
+              setMatchMode(mode);
+            }}
           />
         ) : (
           <GameView

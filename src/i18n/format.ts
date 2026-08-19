@@ -59,3 +59,24 @@ export function playerNameComparator(locale: string): (a: string, b: string) => 
   });
   return (a, b) => collator.compare(a, b);
 }
+
+/**
+ * Format an ISO `YYYY-MM-DD` bound, as a date input produces them (B-010's filter chips).
+ *
+ * Same UTC parsing as `formatPgnDate` above and for the same reason: a bare
+ * `new Date("2024-06-08")` is UTC midnight and renders as the 7th anywhere west of Greenwich.
+ * Returns the input unchanged if it is not a complete ISO date — a half-typed bound is the
+ * user's text, not something to reformat or blank.
+ */
+export function formatIsoDate(iso: string, locale: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (match === null) return iso;
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(
+    new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))),
+  );
+}

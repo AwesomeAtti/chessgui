@@ -100,6 +100,9 @@ import { useTranslation } from "react-i18next";
 import { formatPgnDate } from "@/i18n/format";
 import { GameResult, type GameId, type GameSummary } from "@/model/game";
 
+import { FilterChips } from "./FilterChips";
+import { FilterPanel } from "./FilterPanel";
+import { activeCriteria, applyFilters, type Criterion, type MatchMode } from "./filters";
 import { ImportStrip } from "./ImportStrip";
 import type { ImportReport } from "./importReport";
 
@@ -126,6 +129,17 @@ interface LibraryViewProps {
    */
   importReport: ImportReport | null;
   onDismissReport: () => void;
+  /**
+   * Applied filter criteria, and how they combine (B-010).
+   *
+   * **Lifted to `App` rather than held here, exactly as `query` already is**, because this
+   * view unmounts whenever a game tab is active. State kept locally would silently reset every
+   * time the user opened a game and came back — already true of sort and column layout, where
+   * it is a known wart, and not tolerable for a filter somebody composed by hand.
+   */
+  criteria: readonly Criterion[];
+  matchMode: MatchMode;
+  onFiltersChange: (criteria: readonly Criterion[], matchMode: MatchMode) => void;
 }
 
 function resultKey(result: GameSummary["result"]) {
@@ -197,11 +211,17 @@ export function LibraryView({
   onAddGames,
   importReport,
   onDismissReport,
+  criteria,
+  matchMode,
+  onFiltersChange,
 }: LibraryViewProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const activeRow = useRef<HTMLTableRowElement | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
+  // Transient, so it stays local: whether the composer is open is not worth surviving a tab
+  // switch, unlike the criteria themselves.
+  const [filterOpen, setFilterOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   // Empty means "use the column-def order above" (Date first) — also what "Reset columns"
   // restores, so no separate DEFAULT_COLUMN_ORDER constant is needed.
@@ -289,7 +309,7 @@ export function LibraryView({
     };
   }, []);
 
-  const filtered = useMemo(() => {
+  const byQuery = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (needle === "") return games;
     return games.filter((game) =>
@@ -299,6 +319,18 @@ export function LibraryView({
         .includes(needle),
     );
   }, [games, query]);
+
+  // The quick search and the composed criteria both narrow, and they AND together — the
+  // survey's "quick path first, composed second" shape (ChessBase, Discord, Gmail all keep
+  // both rather than making one replace the other). Chained rather than merged so each stays
+  // separately testable, and so `applyFilters` can return its input untouched when no
+  // criterion is active.
+  const filtered = useMemo(
+    () => applyFilters(byQuery, criteria, matchMode),
+    [byQuery, criteria, matchMode],
+  );
+
+  const activeCount = activeCriteria(criteria).length;
 
   // Column defs live inside the component: cells need `t` and `locale` (date formatting,
   // result glyphs), and both can change at runtime once a second locale ships (B-075).
@@ -584,6 +616,7 @@ export function LibraryView({
       )}
 
       <div className="table-region">
+        {/* `position: relative` because the filter panel anchors to the button below. */}
         <div className="filter-bar">
           <input
             type="search"
@@ -592,13 +625,50 @@ export function LibraryView({
             placeholder={t("library.searchPlaceholder")}
             aria-label={t("library.searchPlaceholder")}
           />
+          <button
+            type="button"
+            className={activeCount > 0 ? "filter-btn active" : "filter-btn"}
+            aria-haspopup="dialog"
+            aria-expanded={filterOpen}
+            onClick={() => setFilterOpen((open) => !open)}
+          >
+            {t("library.filter.button")}
+            {activeCount > 0 && (
+              <span className="badge">
+                {t("library.filter.activeCount", { value: activeCount })}
+              </span>
+            )}
+          </button>
           <span className="count">
             {t("library.count", { shown: visible.length, total: games.length })}
           </span>
           <button type="button" onClick={() => onAddGames()}>
             {t("library.addGames")}
           </button>
+
+          {filterOpen && (
+            <FilterPanel
+              criteria={criteria}
+              matchMode={matchMode}
+              onApply={(next, mode) => {
+                onFiltersChange(next, mode);
+                setFilterOpen(false);
+              }}
+              onClose={() => setFilterOpen(false)}
+            />
+          )}
         </div>
+
+        <FilterChips
+          criteria={criteria}
+          onRemove={(id) =>
+            onFiltersChange(
+              criteria.filter((criterion) => criterion.id !== id),
+              matchMode,
+            )
+          }
+          onClearAll={() => onFiltersChange([], matchMode)}
+        />
 
         <div className="table-scroll" ref={tableScrollRef}>
           <table className="game-table" style={{ width: tableWidth || undefined }}>

@@ -63,6 +63,69 @@ export const en = {
       // Restores order, visibility, and width to the shipped defaults (B-008 milestone 4).
       reset: "Reset columns",
     },
+    /**
+     * The composed filter panel (B-010).
+     *
+     * The shape was surveyed rather than invented: Finder Smart Folders, Music Smart Playlists
+     * and Lightroom Smart Collections all compose filters as criterion rows, and all three are
+     * the same problem as this one — a large personal collection with many attributes. Chips
+     * display applied state; they are not how it is authored. See `docs/ui-survey.md`.
+     *
+     * **`matchLabel` plus a whole-phrase option is deliberate.** The screen reads
+     * "Match [all of the following]" — a sentence with a control inside it, which is the one
+     * shape this catalogue forbids assembling at a call site. Letting the option carry the
+     * whole phrase keeps the translator in charge of the sentence and leaves `matchLabel` an
+     * ordinary control label rather than a fragment.
+     */
+    filter: {
+      button: "Filter",
+      // The count badge on the button. Not `count`, which would make i18next look for plural
+      // forms this has no use for — it is a bare number, routed through Intl like every other.
+      activeCount: "{{value, number}}",
+      title: "Filter games",
+      add: "Add criterion",
+      remove: "Remove this criterion",
+      apply: "Apply",
+      cancel: "Cancel",
+      clearAll: "Clear all",
+      matchLabel: "Match",
+      matchAll: "all of the following",
+      matchAny: "any of the following",
+      // The searchable field picker. This is what lets the field list grow (B-021) without the
+      // panel growing with it — the whole reason the field control is not a plain dropdown.
+      fieldSearch: "Search fields",
+      fieldNone: "No matching field",
+      removeChip: "Remove this filter",
+      // Field names that exist only here. Every other field label is reused from `columns` or
+      // `info` via FIELD_LABEL_KEYS in FilterPanel.tsx, where the reuse is written down.
+      fields: {
+        eitherPlayer: "Either player",
+      },
+      operators: {
+        contains: "contains",
+        notContains: "does not contain",
+        is: "is",
+        isNot: "is not",
+        startsWith: "starts with",
+        over: "is over",
+        under: "is under",
+        between: "is between",
+        before: "is before",
+        after: "is after",
+      },
+      // Result values as words. `notation` holds the glyphs (1-0), which are right in a table
+      // cell and wrong in a dropdown.
+      results: {
+        white: "White win",
+        black: "Black win",
+        draw: "Draw",
+        unknown: "Unknown",
+      },
+      // Between two bounds of a range. In the catalogue rather than in code for the same reason
+      // `notation` is: dash conventions are not universal.
+      rangeTo: "\u2013",
+    },
+
     columns: {
       white: "White",
       black: "Black",
