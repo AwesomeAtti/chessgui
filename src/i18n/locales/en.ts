@@ -48,6 +48,9 @@ export const en = {
     emptyHint: "Paste a PGN, or use Add games.",
     addGames: "Add games…",
     noMatches: "No games match this search.",
+    // {{column}} arrives already translated (a column header, e.g. "Date") — this interpolates
+    // a resolved phrase rather than assembling one, same precedent as `import.summary.okFiles`.
+    sortToggle: "Sort by {{column}}",
     columns: {
       white: "White",
       black: "Black",

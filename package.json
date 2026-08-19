@@ -17,6 +17,7 @@
     "survey:pgn": "node scripts/survey-pgn.mjs"
   },
   "dependencies": {
+    "@tanstack/react-table": "^8.21.3",
     "chessground": "^9.2.1",
     "chessops": "^0.15.1",
     "i18next": "^26.3.6",

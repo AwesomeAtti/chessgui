@@ -288,6 +288,36 @@ button {
   color: var(--text-muted);
 }
 
+/* Sort control (B-008 milestone 1). The whole header cell is the hit target — a small arrow
+   glyph alone would fail a fat-finger test, and this is the same affordance every surveyed
+   product uses (click-header-to-sort; see docs/ui-survey.md). */
+.th-sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0.25rem var(--gap);
+  cursor: default;
+  text-align: start;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+}
+
+.th-sort:hover {
+  background: var(--selection);
+}
+
+.sort-arrow {
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+.game-table th[aria-sort="ascending"] .sort-arrow,
+.game-table th[aria-sort="descending"] .sort-arrow {
+  color: var(--text);
+}
+
 .game-table th,
 .game-table td {
   padding: 0.25rem var(--gap);
@@ -297,6 +327,13 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Overrides the shared th/td padding above — .th-sort supplies its own so the whole header
+   cell is the click target, not just the text inside a padded box. Placed after the shared
+   rule on purpose: identical specificity, source order decides. */
+.game-table th {
+  padding: 0;
 }
 
 .game-table td {

@@ -6,12 +6,29 @@
 > `docs/session-archive.md`, not here (see B-118). If an entry below would take more than a
 > few sentences to justify, put the reasoning in the archive and link to it.
 
-**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 9, doc-bloat pass) · **Kit version:** 0.2.0
+**Last updated:** 2026-08-19 · **Updated by:** AI (Stage 3 / session 10, B-008 milestone 1) ·
+**Kit version:** 0.2.0
 
-**State in one line:** **B-007 (import) and B-011 (persistence) are both done, verified, and
-pushed.** Nothing is mid-flight. Next up is **B-008/B-010** — the real library table and search.
+**State in one line:** **B-008 milestone 1 (sort) is built, fully verified on the owner's own
+machine (including `cargo test`/`clippy`, which the sandbox can't run), and ready to commit.**
+B-007 and B-011 remain done/verified/pushed. Next up after the commit: B-008's column-visibility
+milestone and B-010's filter panel (Option C).
 
-**This session's only change was documentation hygiene (B-118), not product code.**
+**This session: research (sort/filter UX survey, widened past chess into general apps) and
+B-008 milestone 1 (sort).** `docs/ui-survey.md` gained a new section comparing where sort/filter
+controls live across Scid, ChessBase, GitHub Issues, Linear, and general enterprise table-UX
+guidance — conclusion: sort-by-header-click is universal, but filtering belongs in a filter bar
+plus a composed panel with chip-rendered active filters (**Option C**), never in the column
+headers. The owner picked Option C for B-010. `LibraryView` now sorts via `@tanstack/react-table`
+(pinned to the ^8.21.3 line, not the newer v9 — see "Standing constraints" and the B-008 backlog
+entry for why); filtering, column selection, and the Option C panel are still ahead. Verified
+twice: first in a cloned copy of this repo in the AI sandbox (typecheck/test/check:i18n/build,
+plus a headless-Playwright screenshot of unsorted/asc/desc states against fabricated data), then
+for real on the owner's own machine — `npm install`, the full frontend chain, `cargo test`,
+`cargo clippy --all-targets -- -D warnings`, and `npm run tauri dev` against the real 3,412-game
+set, all green. Two commits are staged and ready (see "Next actions"); neither has been made yet.
+
+**Prior session's only change was documentation hygiene (B-118), not product code.**
 `docs/handover.md` had grown to 147 KB / 1840 lines and `docs/backlog.md` to 129 KB, both required
 reading in full every session. Fix: the full session-by-session narrative that used to live in
 this file is now in `docs/session-archive.md`, verbatim; several backlog items whose Notes column
@@ -40,15 +57,33 @@ no longer what the app does.
 
 ## Active work
 
-**Nothing is half-built.** B-007 and B-011 are both done, verified (including by the owner
-running the built app), committed, and pushed to `origin/main`. The last commit this session's
-predecessor made was `c923321`.
+**B-008 milestone 1 (sort) is built, verified end-to-end on the owner's machine, and staged as
+two commits not yet made.** Nothing else is half-built: B-007 and B-011 remain done, verified,
+committed, and pushed to `origin/main` as of `c923321`.
 
-**Next planned work: B-008 (game list, sort, column selection) and B-010 (header search/filter)**,
-where TanStack gets introduced and the still-unmeasured half of B-033 (rendering 10k rows, <200ms
-filtered search) finally becomes testable. This is **Large tier** per AGENTS.md (MVP core, new
-dependency/pattern) — plan briefly before building, and mock the table/filter layout before coding
-it if it changes what's visible on screen (AGENTS.md's mandatory mock-before-code rule).
+**Files touched this session, currently uncommitted:**
+`src/features/library/LibraryView.tsx` (TanStack Table wiring — sort only, filtering/rendering
+logic otherwise unchanged), `src/i18n/locales/en.ts` (`library.sortToggle`, one new catalogue
+key), `src/styles.css` (`.th-sort` header-button styling), `package.json` /
+`package-lock.json` (`@tanstack/react-table` ^8.21.3 added), `docs/backlog.md`, `docs/handover.md`
+(this file), and `docs/ui-survey.md`.
+
+**Split into two commits, staged by concern rather than by turn:**
+1. `docs/ui-survey.md` alone — the research and the Option C decision, independent of any code.
+2. Everything else — the sort feature plus the backlog/handover entries that describe it.
+
+**If a session picks this up mid-way:** check `git log` and `git status` before assuming either
+commit landed — this handover was written in the same turn the commits were proposed, not after
+confirming they happened.
+
+**Next planned work after the commit: B-008's column-visibility milestone, then B-010's Option C
+filter panel** (a "Filter" control opening composed player/event/date/result/ECO criteria, active
+filters shown as removable chips — decided this session over per-column header filtering, which
+`docs/ui-survey.md`'s new section found no precedent for in any surveyed product, chess or
+general). That's also where the still-unmeasured half of B-033 (rendering 10k rows, <200ms
+filtered search) finally becomes testable. Mock any further layout change before coding it
+(AGENTS.md's mandatory rule) — sort and Option C's resting/open states are already mocked and
+owner-approved; column visibility is not yet.
 
 ## Standing constraints
 
@@ -77,6 +112,14 @@ it if it changes what's visible on screen (AGENTS.md's mandatory mock-before-cod
   static and dynamic `import()` forms.
 - **chessground owns its own DOM subtree.** `src/features/board/useChessground.ts` is the only
   React↔chessground seam; its container div must never be given React children.
+- **`@tanstack/react-table` is pinned to the `^8.21.3` line, deliberately not npm's `latest`
+  (9.1.2, added B-008 session 10).** v9 shipped as stable very recently and replaced the v8 hook
+  API (`useReactTable`, `getCoreRowModel()`, `getSortedRowModel()`) with a feature-flag
+  architecture (`useTable`, `tableFeatures()`, per-column-typed `createColumnHelper`) that has
+  far fewer real-world examples and is a meaningfully bigger surface for a solo-maintained
+  project. v8 is what every existing tutorial, Stack Overflow answer, and this codebase's own
+  `LibraryView.tsx` already use. Don't "upgrade" to v9 without a deliberate reason — it's a
+  rewrite of the table wiring, not a version bump.
 - **The source layout is established** (`docs/tech-stack.md`). Per AGENTS.md, restructuring it is
   a hard stop.
 - **Store the raw thing, derive the useful thing** (ADR-0005). Derived values are never
