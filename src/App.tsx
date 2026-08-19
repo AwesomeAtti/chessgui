@@ -405,7 +405,15 @@ export default function App() {
         onClose={() => setImportOpen(false)}
       />
 
+      {/*
+        The credit sits outside the `appInfo` branch so it shows even before the shell has
+        answered — and in a plain browser, where it never will. Version and licence stay inside
+        it because both are read from the Rust side and there is nothing honest to print until
+        that returns. The separators are markup, not catalogue text: they join independent
+        phrases rather than assembling a sentence, which is the line B-072 actually draws.
+      */}
       <footer className="statusbar">
+        <span>{t("about.credit")}</span>{" "}
         {appInfo !== null ? (
           <span>
             {t("about.version", { version: appInfo.version })} ·{" "}

@@ -301,8 +301,26 @@ export const en = {
     unknown: "Unknown",
   },
 
+  /**
+   * The status bar.
+   *
+   * **`credit` deliberately contains an account handle**, at the owner's explicit request
+   * (session 17). `docs/handover.md` carries a standing rule against real names, usernames and
+   * email addresses in tracked files, and the owner chose to leave that rule as written rather
+   * than carve out an exception — so this is a known, intentional exception rather than an
+   * oversight. **Do not "fix" it by deleting the name.** That rule exists to stop personal
+   * information leaking by accident; an authorship credit the author asked for is not that, and
+   * the handle is already public on the repository's own URL.
+   *
+   * **`version` interpolates rather than hardcoding the number.** The value comes from
+   * `CARGO_PKG_VERSION` at compile time (`src-tauri/src/lib.rs`), so a literal "0.1.0" here
+   * would go stale the moment `src-tauri/Cargo.toml` is bumped, and the footer would quietly
+   * start lying about which build is running. Not a number for `Intl`: a semantic version is an
+   * identifier, not a quantity, and grouping it would be wrong in every locale.
+   */
   about: {
-    version: "Version {{version}}",
+    credit: "AwesomeAtti designed. AI assisted.",
+    version: "v. {{version}}",
     license: "Licence: {{license}}",
     shellUnavailable: "Running in a browser — the desktop shell is not attached.",
   },
